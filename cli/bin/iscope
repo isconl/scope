@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# isconl/scope/cli/bin/iscope
+# Scope system entry point — daily rhythm: inbox, tasks, goals, reflection, cycles.
+# ─────────────────────────────────────────────────────────────────────────────
+# CHANGELOG (newest first)
+# ─────────────────────────────────────────────────────────────────────────────
+#   v2.3.0  2026-04-30  Standalone repo structure. Shared libs from
+#                       ~/.local/lib/sconl/. Data from tenant.toml.
+#                       Python engines from calendar-core.
+#   v2.2.1  2026-04-20  iscope entry point (was sconlx scope)
+# ─────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATH RESOLUTION
+# bin/ is inside cli/ which is inside the repo root.
+# ─────────────────────────────────────────────────────────────────────────────
+_SCOPE_BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_SCOPE_ROOT="$(cd "$_SCOPE_BIN/../.." && pwd)"          # repo root
+_SCOPE_CLI_LIB="$_SCOPE_ROOT/cli/lib"                   # scope.sh, calendar.sh
+_SHARED_LIB="${HOME}/.local/lib/sconl"                  # ui.sh, db.sh, events.sh
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED LIB CHECK
+# ─────────────────────────────────────────────────────────────────────────────
+if [[ ! -f "$_SHARED_LIB/ui.sh" ]]; then
+  printf '  x  Shared libs not found at %s\n' "$_SHARED_LIB" >&2
+  printf '     Run: hub/install.sh  or  scope/install.sh\n' >&2
+  exit 1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TENANT CONFIG — read data dir from tenant.toml
+# ─────────────────────────────────────────────────────────────────────────────
+_TENANT_TOML="${HOME}/.config/sconl/tenant.toml"
+
+_read_toml_value() {
+  local file="$1" key="$2"
+  grep -E "^${key}\s*=" "$file" 2>/dev/null \
+    | head -1 \
+    | sed 's/.*=\s*"\(.*\)"/\1/'
+}
+
+if [[ -f "$_TENANT_TOML" ]]; then
+  _SCOPE_DATA_DIR="$(_read_toml_value "$_TENANT_TOML" "scope_dir")"
+  _SHARED_LIB_DIR="$(_read_toml_value "$_TENANT_TOML" "shared_lib_dir")"
+  _CALENDARX_DIR="$(_read_toml_value "$_TENANT_TOML" "calendarx_dir")"
+  [[ -n "$_SHARED_LIB_DIR" ]] && _SHARED_LIB="$_SHARED_LIB_DIR"
+  [[ -n "$_CALENDARX_DIR" ]]  && _CALX_CORE="$_CALENDARX_DIR/core/sconl_calendar"
+fi
+
+# Fall back to data/ inside the repo if tenant.toml has no scope_dir
+if [[ -z "${_SCOPE_DATA_DIR:-}" ]]; then
+  _SCOPE_DATA_DIR="$_SCOPE_ROOT/data"
+fi
+
+# Fall back to calendar-core sibling directory
+if [[ -z "${_CALX_CORE:-}" ]]; then
+  _CALX_CORE="$(cd "$_SCOPE_ROOT/../calendar-core/core/sconl_calendar" 2>/dev/null && pwd)" || \
+  _CALX_CORE=""
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PYTHON ENGINE PATH RESOLUTION
+# Canonical: calendar-core/core/sconl_calendar/
+# Legacy fallback: isconl-space/lib/ (during transition)
+# ─────────────────────────────────────────────────────────────────────────────
+_py_path() {
+  local canonical="$1" legacy="$2" label="$3"
+  if [[ -f "$canonical" ]]; then
+    printf '%s' "$canonical"; return 0
+  fi
+  if [[ -f "$legacy" ]]; then
+    printf '  !  %s at legacy path — migrate to calendar-core\n' "$label" >&2
+    printf '%s' "$legacy"; return 0
+  fi
+  printf '  x  %s not found\n' "$label" >&2
+  printf '%s' "$canonical"; return 1
+}
+
+_LEGACY_LIB="$(cd "$_SCOPE_ROOT/../../XCore/xspace/isconl-space/lib" 2>/dev/null && pwd)" || \
+  _LEGACY_LIB=""
+
+_EQUICYCLE_PY="$(_py_path \
+  "${_CALX_CORE:-}/equicycle.py" \
+  "${_LEGACY_LIB:-}/equicycle.py" \
+  "equicycle.py")" || true
+
+_CAL_PY="$(_py_path \
+  "${_CALX_CORE:-}/calendar_data.py" \
+  "${_LEGACY_LIB:-}/calendar_data.py" \
+  "calendar_data.py")" || true
+
+export _EQUICYCLE_PY _CAL_PY
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXPORT PATHS FOR SOURCED LIBS
+# All libs use ${_VAR:-fallback} so they never overwrite these.
+# ─────────────────────────────────────────────────────────────────────────────
+export _FLAT_DIR="${HOME}/.local/share/sconl/data"
+export _ISCONLSPACE_LIB_DIR="$_SCOPE_CLI_LIB"
+export _ISCONLSPACE_DATA_DIR="$_SCOPE_DATA_DIR"
+export _ISCONLSPACE_DIR="$_SCOPE_ROOT"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IFS — word splitting: spaces don't split, only newlines and tabs
+# ─────────────────────────────────────────────────────────────────────────────
+IFS=$'\n\t'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SOURCE LIBS — shared first, then system-specific
+# ─────────────────────────────────────────────────────────────────────────────
+source "$_SHARED_LIB/ui.sh"
+source "$_SHARED_LIB/db.sh"
+source "$_SHARED_LIB/events.sh"
+source "$_SCOPE_CLI_LIB/scope.sh"
+source "$_SCOPE_CLI_LIB/calendar.sh"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INIT
+# ─────────────────────────────────────────────────────────────────────────────
+_db_init
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BASENAME DISPATCH — iscope always routes to scope
+# ─────────────────────────────────────────────────────────────────────────────
+set -- scope "$@"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VERSION / HELP FLAGS
+# ─────────────────────────────────────────────────────────────────────────────
+case "${1:-}" in
+  --version|-v)
+    printf 'iscope 2.3.0 (%s mode)\n' "$_DATA_MODE"
+    printf 'data: %s\n' "$_SCOPE_DATA_DIR"
+    exit 0 ;;
+  --help|-h)
+    printf 'Usage: iscope [inbox|today|task|goal|reflect|cycle|identity|plan]\n'
+    exit 0 ;;
+esac
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROUTE
+# ─────────────────────────────────────────────────────────────────────────────
+_scope_route "${@:2}"
