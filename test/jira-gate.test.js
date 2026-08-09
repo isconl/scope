@@ -7,8 +7,8 @@ function makeStore(seed = {}) {
   const data = { ...seed };
   return {
     data,
-    readTSV: (rel) => (data[rel] || []).slice(),
-    rewriteTSV: (rel, fn) => { data[rel] = fn((data[rel] || []).slice()); return data[rel].length; },
+    readTSV: async (rel) => (data[rel] || []).slice(),
+    rewriteTSV: async (rel, fn) => { data[rel] = fn((data[rel] || []).slice()); return data[rel].length; },
   };
 }
 

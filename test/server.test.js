@@ -1,30 +1,67 @@
 'use strict';
 /**
- * End-to-end smoke tests: start scope's real HTTP server and hit it with
- * real requests -- same purpose as vault's and pulse's own server.test.js.
+ * End-to-end smoke tests: start scope's real HTTP server, backed by a real
+ * (fake, in-process) vault HTTP server for TSV data -- same shape as the
+ * real GET/POST/PUT /vault/:collection contract, so this exercises the
+ * actual remote-store wire format, not a shortcut.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const http = require('http');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-function tmpEnv() {
-  const memoryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-e2e-memory-'));
-  const logsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-e2e-logs-'));
-  fs.mkdirSync(path.join(memoryDir, 'scope'), { recursive: true });
-  fs.writeFileSync(path.join(memoryDir, 'scope', 'tasks.tsv'),
-    'ID\tTITLE\tSTATUS\tPRIORITY\tPROJECT_ID\tCARRY_FWD\tDUE_DATE\tCREATED_AT\tJIRA_KEY\tTAG\tPARENT_ID\tDONE_AT\tSTART_DATE\tASSIGNEE\n');
-  return { memoryDir, logsDir };
+function startFakeVault(seed = {}) {
+  const data = { ...seed };
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url, 'http://localhost');
+      const collection = decodeURIComponent(url.pathname.slice('/vault/'.length));
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        res.setHeader('Content-Type', 'application/json');
+        if (req.method === 'GET') {
+          res.writeHead(200);
+          return res.end(JSON.stringify({ collection, rows: data[collection] || [] }));
+        }
+        if (req.method === 'POST') {
+          let row = {};
+          try { row = JSON.parse(body || '{}'); } catch { /* ignore */ }
+          (data[collection] = data[collection] || []).push(row);
+          res.writeHead(200);
+          return res.end(JSON.stringify({ ok: true, collection }));
+        }
+        if (req.method === 'PUT') {
+          let rows = [];
+          try { rows = JSON.parse(body || '{}').rows || []; } catch { /* ignore */ }
+          const before = (data[collection] || []).length;
+          data[collection] = rows;
+          res.writeHead(200);
+          return res.end(JSON.stringify({ ok: true, collection, count: rows.length, removed: before - rows.length }));
+        }
+        res.writeHead(404);
+        res.end(JSON.stringify({ error: 'Not Found' }));
+      });
+    });
+    server.listen(0, '127.0.0.1', () => resolve({ server, data, port: server.address().port }));
+  });
 }
 
-async function startServer(envOverrides = {}) {
-  const { memoryDir, logsDir } = tmpEnv();
+function tmpEnv() {
+  const logsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-e2e-logs-'));
+  return { logsDir };
+}
+
+async function startServer(envOverrides = {}, vaultSeed = {}) {
+  const { logsDir } = tmpEnv();
+  const vault = await startFakeVault({ 'scope/tasks.tsv': [], ...vaultSeed });
   const savedEnv = { ...process.env };
   Object.assign(process.env, {
     SCOPE_PORT: '0',
     SCOPE_BIND: '127.0.0.1',
-    SCOPE_MEMORY_DIR: memoryDir,
+    VAULT_URL: `http://127.0.0.1:${vault.port}`, VAULT_TOKEN: 'vault-test-token',
     SCOPE_LOGS_DIR: logsDir,
     SCOPE_TOKEN: 'test-static-token',
     BWS_ACCESS_TOKEN: '',
@@ -37,8 +74,9 @@ async function startServer(envOverrides = {}) {
   const cleanup = () => {
     Object.keys(process.env).forEach(k => { if (!(k in savedEnv)) delete process.env[k]; });
     Object.assign(process.env, savedEnv);
+    vault.server.close();
   };
-  return { ...handle, cleanup };
+  return { ...handle, vault, cleanup };
 }
 
 test('GET /health responds without auth', async () => {

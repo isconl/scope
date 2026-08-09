@@ -17,7 +17,7 @@ const manifest = require('../lib/manifest');
 
 const PORT = parseInt(process.env.SCOPE_PORT || process.env.PORT || '8083', 10);
 const BIND = process.env.SCOPE_BIND || '127.0.0.1';
-const MEMORY_DIR = process.env.SCOPE_MEMORY_DIR || process.env.VAULT_MEMORY_DIR || path.join(__dirname, '..', 'memory');
+const VAULT_URL = process.env.VAULT_URL || '';
 const LOGS_DIR = process.env.SCOPE_LOGS_DIR || path.join(__dirname, '..', 'runtime', 'logs');
 
 function readBody(req) {
@@ -47,7 +47,15 @@ async function main() {
   console.log(`  secrets: ${secretsResult.source}, ${secretsResult.count} key(s)`);
 
   const auditLog = createAuditLog({ logsDir: LOGS_DIR });
-  const store = createStore({ memoryDir: MEMORY_DIR, auditLog });
+  if (!VAULT_URL) {
+    console.error('  REFUSING TO START: VAULT_URL is not configured -- scope has no data store without it.');
+    process.exit(1);
+  }
+  const store = createStore({
+    baseUrl: VAULT_URL,
+    getToken: () => process.env.VAULT_TOKEN || secretStore.get('VAULT_TOKEN') || '',
+    auditLog,
+  });
   const readTSV = store.read, appendTSV = store.append, rewriteTSV = store.rewrite;
 
   const getJiraConfig = () => ({
@@ -93,11 +101,11 @@ async function main() {
 
     try {
       if (pathname === '/tasks' && req.method === 'GET') {
-        return sendJson(res, 200, { tasks: tasks.listTasks() });
+        return sendJson(res, 200, { tasks: await tasks.listTasks() });
       }
       if (pathname.startsWith('/tasks/') && req.method === 'GET' && !pathname.startsWith('/tasks/update') && !pathname.startsWith('/tasks/delete') && !pathname.startsWith('/tasks/done')) {
         const id = decodeURIComponent(pathname.slice('/tasks/'.length));
-        const task = tasks.getTask(id);
+        const task = await tasks.getTask(id);
         if (!task) return sendJson(res, 404, { error: `Task ${id} not found` });
         return sendJson(res, 200, { task });
       }
