@@ -75,6 +75,16 @@ test('adf() wraps plain text in Atlassian Document Format, splitting on blank li
   assert.equal(doc.content[0].content[0].text, 'first line');
 });
 
+test('jiraListMyIssues returns empty (no request, no hardcoded fallback project) when no projectKey is configured', async () => {
+  const client = makeClient({ projectKey: '' });
+  let called = false;
+  await withFakeHttps(() => { called = true; return { status: 200, body: { issues: [] } }; }, async () => {
+    const issues = await client.jiraListMyIssues();
+    assert.deepEqual(issues, []);
+    assert.equal(called, false);
+  });
+});
+
 test('jiraListMyIssues maps fields and drops recently-deleted keys from the result', async () => {
   const client = makeClient();
   client.markDeleted('WSRU-5');
