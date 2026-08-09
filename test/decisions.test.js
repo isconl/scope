@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { createDecisionsClient } = require('../lib/decisions');
 
 function makeReadTSV(seed) {
-  return (rel) => (seed[rel] || []).slice();
+  return async (rel) => (seed[rel] || []).slice();
 }
 
 test('createDecisionsClient throws without readTSV', () => {
