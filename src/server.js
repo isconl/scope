@@ -35,7 +35,7 @@ function sendJson(res, status, obj) {
 }
 
 function checkAuth(req) {
-  const token = process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN || '';
+  const token = process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN || secretStore.get('SCOPE_TOKEN') || '';
   if (!token) return false;
   const auth = req.headers.authorization || '';
   const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
@@ -79,7 +79,7 @@ async function main() {
 
   const decisions = createDecisionsClient({ readTSV, auditLog });
 
-  const tokenConfigured = !!(process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN);
+  const tokenConfigured = !!(process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN || secretStore.get('SCOPE_TOKEN'));
   const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(BIND);
   if (!isLoopback && !tokenConfigured) {
     console.error('  REFUSING TO BIND: no SCOPE_TOKEN/ISCONL_TOKEN configured and BIND is not loopback.');
