@@ -13,11 +13,15 @@ const { createJiraClient } = require('../lib/jira');
 const { createTasksClient } = require('../lib/tasks');
 const { createJiraGateClient } = require('../lib/jira-gate');
 const { createDecisionsClient } = require('../lib/decisions');
+const { createCorporateClient } = require('../lib/corporate');
 const manifest = require('../lib/manifest');
+const httpLib = require('http');
+const httpsLib = require('https');
 
 const PORT = parseInt(process.env.SCOPE_PORT || process.env.PORT || '8083', 10);
 const BIND = process.env.SCOPE_BIND || '127.0.0.1';
 const VAULT_URL = process.env.VAULT_URL || '';
+const CIRCLE_URL = process.env.CIRCLE_URL || '';
 const LOGS_DIR = process.env.SCOPE_LOGS_DIR || path.join(__dirname, '..', 'runtime', 'logs');
 
 function readBody(req) {
@@ -77,7 +81,33 @@ async function main() {
 
   const jiraGate = createJiraGateClient({ readTSV, rewriteTSV, auditLog, jira, getConfig: getJiraConfig });
 
-  const decisions = createDecisionsClient({ readTSV, auditLog });
+  // Cross-engine: career context (org facts, decisions, risks, people,
+  // doctrine) lives in circle (lib/career.js), served over HTTP at
+  // GET /career -- see circle/src/server.js. Optional: if CIRCLE_URL
+  // isn't configured, both decisions and corporate degrade to empty
+  // rather than failing to boot, same fail-soft pattern as jiraConfigured.
+  const getCareerContext = async () => {
+    if (!CIRCLE_URL) return { activeOrg: null, orgName: null, orgs: [], people: [], decisions: [], risks: [], playbooks: [], doctrine: {}, available: false };
+    const url = new URL('/career', CIRCLE_URL);
+    const lib = url.protocol === 'https:' ? httpsLib : httpLib;
+    const token = process.env.CIRCLE_TOKEN || secretStore.get('CIRCLE_TOKEN') || '';
+    return new Promise((resolve) => {
+      const req = lib.request(url, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }, (res) => {
+        let raw = '';
+        res.on('data', (c) => { raw += c; });
+        res.on('end', () => {
+          try { resolve(res.statusCode === 200 ? JSON.parse(raw) : { available: false, orgs: [] }); }
+          catch { resolve({ available: false, orgs: [] }); }
+        });
+      });
+      req.on('error', () => resolve({ available: false, orgs: [] }));
+      req.setTimeout(5000, () => { req.destroy(); resolve({ available: false, orgs: [] }); });
+      req.end();
+    });
+  };
+
+  const decisions = createDecisionsClient({ readTSV, auditLog, getCareerContext });
+  const corporate = createCorporateClient({ readTSV, auditLog, getCareerContext });
 
   const tokenConfigured = !!(process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN || secretStore.get('SCOPE_TOKEN'));
   const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(BIND);
@@ -143,6 +173,15 @@ async function main() {
       if (pathname === '/decisions/update' && req.method === 'POST') {
         return sendJson(res, 200, await decisions.updateDecision(JSON.parse(await readBody(req) || '{}')));
       }
+
+      if (pathname === '/corporate' && req.method === 'GET') {
+        return sendJson(res, 200, await corporate.listEngagements());
+      }
+      if (pathname === '/corporate/detail' && req.method === 'GET') {
+        const eng = await corporate.getEngagement(url.searchParams.get('id'));
+        if (!eng) return sendJson(res, 404, { error: 'Engagement not found' });
+        return sendJson(res, 200, eng);
+      }
     } catch (e) {
       return sendJson(res, 400, { success: false, error: String(e.message || e) });
     }
@@ -154,7 +193,7 @@ async function main() {
     server.listen(PORT, BIND, () => {
       const actualPort = server.address().port;
       console.log(`  scope listening on ${BIND}:${actualPort}`);
-      resolve({ server, store, jira, tasks, jiraGate, decisions, auditLog, secretStore, port: actualPort });
+      resolve({ server, store, jira, tasks, jiraGate, decisions, corporate, auditLog, secretStore, port: actualPort });
     });
   });
 }
