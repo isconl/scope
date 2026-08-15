@@ -13,6 +13,7 @@ const { createJiraClient } = require('../lib/jira');
 const { createTasksClient } = require('../lib/tasks');
 const { createJiraGateClient } = require('../lib/jira-gate');
 const { createDecisionsClient } = require('../lib/decisions');
+const { createPlansClient } = require('../lib/plans');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
 const manifest = require('../lib/manifest');
@@ -108,6 +109,7 @@ async function main() {
   };
 
   const decisions = createDecisionsClient({ readTSV, auditLog, getCareerContext });
+  const plans = createPlansClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const corporate = createCorporateClient({ readTSV, auditLog, getCareerContext });
   const generate = createGenerateClient({ auditLog });
 
@@ -174,6 +176,16 @@ async function main() {
       }
       if (pathname === '/decisions/update' && req.method === 'POST') {
         return sendJson(res, 200, await decisions.updateDecision(JSON.parse(await readBody(req) || '{}')));
+      }
+
+      if (pathname === '/plans' && req.method === 'GET') {
+        return sendJson(res, 200, await plans.listPlans());
+      }
+      if (pathname === '/plans/add' && req.method === 'POST') {
+        return sendJson(res, 200, await plans.addPlan(JSON.parse(await readBody(req) || '{}')));
+      }
+      if (pathname === '/plans/update' && req.method === 'POST') {
+        return sendJson(res, 200, await plans.updatePlan(JSON.parse(await readBody(req) || '{}')));
       }
 
       if (pathname === '/corporate' && req.method === 'GET') {
