@@ -14,6 +14,7 @@ const { createTasksClient } = require('../lib/tasks');
 const { createJiraGateClient } = require('../lib/jira-gate');
 const { createDecisionsClient } = require('../lib/decisions');
 const { createCorporateClient } = require('../lib/corporate');
+const { createGenerateClient } = require('../lib/generate/generate-client');
 const manifest = require('../lib/manifest');
 const httpLib = require('http');
 const httpsLib = require('https');
@@ -108,6 +109,7 @@ async function main() {
 
   const decisions = createDecisionsClient({ readTSV, auditLog, getCareerContext });
   const corporate = createCorporateClient({ readTSV, auditLog, getCareerContext });
+  const generate = createGenerateClient({ auditLog });
 
   const tokenConfigured = !!(process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN || secretStore.get('SCOPE_TOKEN'));
   const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(BIND);
@@ -181,6 +183,16 @@ async function main() {
         const eng = await corporate.getEngagement(url.searchParams.get('id'));
         if (!eng) return sendJson(res, 404, { error: 'Engagement not found' });
         return sendJson(res, 200, eng);
+      }
+
+      if (pathname === '/generate/archetypes' && req.method === 'GET') {
+        return sendJson(res, 200, { archetypes: generate.archetypes(url.searchParams.get('namespace')) });
+      }
+      if (pathname === '/generate/preview' && req.method === 'POST') {
+        return sendJson(res, 200, await generate.preview(JSON.parse(await readBody(req) || '{}')));
+      }
+      if (pathname === '/generate' && req.method === 'POST') {
+        return sendJson(res, 200, await generate.generate(JSON.parse(await readBody(req) || '{}')));
       }
     } catch (e) {
       return sendJson(res, 400, { success: false, error: String(e.message || e) });
