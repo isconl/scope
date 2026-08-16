@@ -137,7 +137,7 @@ Every archetype, regardless of document type, declares:
    - `meta_line` — doc-type label + up to 4 key facts, rendered in the
      `meta` style, e.g. `{type_label} | {url} | {date} | v{version} | {author}`.
      `type_label` and `author` are archetype-level constants
-     (`author` defaults to `"Operator"`); the rest come from content.
+     (`author` defaults to `content.author`); the rest come from content.
 4. **Body sections** — an ordered list of `{key, heading, field_type}`.
    `field_type` is one of `paragraph`, `paragraphs` (list of paragraphs),
    `bullets`, `checked_bullets` (bullet + citation, for "must not say"

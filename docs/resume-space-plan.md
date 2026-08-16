@@ -23,7 +23,7 @@ Per [[isconl-agent-single-user-private-by-design]], this system stays
 single-user — "person-agnostic" here does **not** mean building a
 multi-tenant resume service. It means the same discipline already applied
 to `career/orgs/` (never hardcode "viva" — read it from `_active.yaml`):
-never hardcode "Operator," an email, a phone number, or any personal
+never hardcode a user name, an email, a phone number, or any personal
 fact into an archetype, a renderer, or a template. Every personal fact
 lives in **data**, so the day this is open-sourced, a new user drops in
 their own profile file and the code needs zero edits — same test the
