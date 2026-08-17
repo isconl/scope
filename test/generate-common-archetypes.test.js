@@ -5,7 +5,7 @@ const { build } = require('../lib/generate/doc-builder');
 const { renderMarkdown } = require('../lib/generate/render-markdown');
 const { renderDocx } = require('../lib/generate/render-docx');
 const { filename } = require('../lib/generate/naming');
-const { getArchetype } = require('../lib/generate/registry');
+const { getArchetype, listArchetypes } = require('../lib/generate/registry');
 
 const BRIEF = {
   subject_id: 'wamca-mailbox', audience: 'alex', title: 'Mailbox Provisioning Brief',
@@ -70,6 +70,17 @@ test('seed-data-catalogue renders a valid .docx package', async () => {
   const { tree } = build('_common', 'seed-data-catalogue', CATALOGUE);
   const buf = await renderDocx(tree);
   assert.equal(buf.slice(0, 2).toString(), 'PK');
+});
+
+test('listArchetypes includes each archetype\'s form field schema, for a UI to render a content form', () => {
+  const list = listArchetypes('_common');
+  const brief = list.find(a => a.id === 'decision-brief');
+  assert.ok(brief);
+  assert.ok(Array.isArray(brief.fields) && brief.fields.length > 0);
+  assert.deepEqual(brief.filenameFields, { primary: 'subject_id', secondary: 'audience' });
+  const decisionAskField = brief.fields.find(f => f.name === 'decision_ask');
+  assert.equal(decisionAskField.type, 'text');
+  assert.equal(decisionAskField.required, true);
 });
 
 test('filename() uses each archetype declared primary/secondary slots', () => {
