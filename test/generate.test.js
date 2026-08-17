@@ -3,6 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { build } = require('../lib/generate/doc-builder');
 const { renderMarkdown } = require('../lib/generate/render-markdown');
+const { renderDocx } = require('../lib/generate/render-docx');
 
 // Content transcribed from the two Alex-approved sample documents
 // (wamca_..._v1_4_0_20260813.docx = master, apma_..._v1_2_0_20260813.docx
@@ -84,4 +85,22 @@ test('page-truth-brief refuses to build a sister site missing sector_label', () 
 test('page-truth-brief refuses to build with a required field missing', () => {
   const bad = { ...WAMCA, focus_paragraphs: undefined };
   assert.throws(() => build('viva-valentia', 'page-truth-brief', bad), /missing required field: focus_paragraphs/);
+});
+
+// render-docx.js was flagged (task-backlog.md D1) as scaffolded but never
+// verified end-to-end. This confirms it actually produces a well-formed
+// .docx (PK zip signature = valid OOXML package) from a real archetype,
+// not just that the node-tree/markdown path works.
+test('renderDocx produces a valid .docx package for the master site', async () => {
+  const { tree } = build('viva-valentia', 'page-truth-brief', WAMCA);
+  const buf = await renderDocx(tree);
+  assert.ok(Buffer.isBuffer(buf));
+  assert.equal(buf.slice(0, 2).toString(), 'PK'); // zip/OOXML signature
+  assert.ok(buf.length > 1000, 'docx should not be a near-empty package');
+});
+
+test('renderDocx produces a valid .docx package for the sister site', async () => {
+  const { tree } = build('viva-valentia', 'page-truth-brief', APMA);
+  const buf = await renderDocx(tree);
+  assert.equal(buf.slice(0, 2).toString(), 'PK');
 });

@@ -87,6 +87,17 @@ test('updateTask validates priority/status/title and rejects bad values', async 
   await assert.rejects(() => client.updateTask({ taskId: 'T1', title: '   ' }));
 });
 
+test('updateTask sets DELIVERABLE without touching Jira', async () => {
+  const store = makeStore({ 'scope/tasks.tsv': [{ ID: 'T1', TITLE: 'x', STATUS: 'today', JIRA_KEY: 'WSRU-9' }] });
+  const jira = fakeJira({ jiraUpdateIssue: async () => { throw new Error('should not be called'); } });
+  const client = createTasksClient({ ...store, jira });
+  const r = await client.updateTask({ taskId: 'T1', deliverable: 'work/files/2026-viva-valentia/brief.docx' });
+  assert.equal(r.task.DELIVERABLE, 'work/files/2026-viva-valentia/brief.docx');
+
+  const r2 = await client.updateTask({ taskId: 'T1', deliverable: '' });
+  assert.equal(r2.task.DELIVERABLE, '-');
+});
+
 test('updateTask returns null for an unknown task', async () => {
   const client = createTasksClient({ ...makeStore() });
   const r = await client.updateTask({ taskId: 'nope', title: 'x' });
