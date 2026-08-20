@@ -152,6 +152,40 @@ Every archetype, regardless of document type, declares:
    missing a required field fails loudly at build time instead of shipping
    a page with a hole in it.
 
+### 3.0 The fractal section shape (general principle, added 20 Aug 2026)
+
+Per Architect's own instruction: **every document in this system, and every
+major section within a document, follows the same three-part shape** —
+a short identifying header, a body carrying the actual payload, and a
+closing footer of secondary metadata. This is not just the top-level
+document shape (§3, fields 3–5: header block / body sections / footer
+note) — it recurses one level into the body itself, so a document reads
+as the same pattern at two scales, not a top-level convention with an
+unrelated shape inside it:
+
+```
+DOCUMENT
+├── header    — title + document control/metadata (who/what/when/version)
+├── body      — the message payload, itself shaped fractally in three parts:
+│   ├── signal      (header-of-the-body: one-line status/orientation)
+│   ├── substance    (body-of-the-body: the actual payload — what happened,
+│   │                 what was decided, what's at risk)
+│   └── trajectory  (footer-of-the-body: forward-looking — what's next)
+└── footer    — secondary/closing metadata (distribution, links, cadence)
+```
+
+This is a **naming/shape convention for archetype authors, not a new
+node type** — `signal`/`substance`/`trajectory` are just section `key`s
+like any other (§3, field 4), rendered with the same `field_type`
+vocabulary already defined (`kv_list`, `bullets`, `paragraphs`, etc.).
+Any archetype MAY use this three-part body shape when its content
+genuinely separates into "orientation / substance / what's next" (true
+of most status-style documents); a document whose content doesn't
+separate that way (e.g. `page-truth-brief`'s numbered content sections,
+§3.1) is not required to force it. `weekly-status-brief` (§3.2) is the
+first archetype built around this shape deliberately, as the concrete
+proof case.
+
 ### 3.1 First archetype: `page-truth-brief`
 
 Directly evidenced by the two sample documents plus Alex's corrections in
@@ -188,6 +222,94 @@ Future archetypes (meeting agenda, feedback/review doc — both seen as raw
 `.doc` attachments in the same chat but not yet specced to this level of
 evidence) get added the same way: a new file in the archetype registry, no
 change to `doc-builder.js` or the renderers.
+
+### 3.2 Second archetype: `weekly-status-brief`
+
+Requested by Architect 20 Aug 2026: a single-page, weekly (Friday) status
+brief for **every active team, project, supervisor, or initiative** —
+not Viva-specific, and explicitly meant to apply equally to companies
+Architect runs himself in future, not only engagements he works within. This
+is the reason it lives in the registry's shared `_common/` bucket (§0),
+not under `viva-valentia/` — the *first* archetype genuinely designed
+generic from day one, rather than generalized later.
+
+```yaml
+id: weekly-status-brief
+title: Weekly Status Brief
+namespace: _common          # reusable across every engagement/project/company,
+                             # never scoped to one org — see rationale above
+header:
+  headline: "{subject_name} — Week of {week_ending_readable}"
+  meta_line: "{subject_type_label} | {subject_id} | {week_ending_readable} | v{major}.{minor}.{patch} | {author}"
+sections:
+  # --- fractal body, per §3.0 ---
+  - key: signal                              # header-of-the-body
+    heading: null                            # unheaded, sits directly under meta_line
+    field_type: kv_list
+    fields: [status, one_line_summary, headline_metric]
+             # status: red/amber/green or content-defined enum, archetype validates
+  - key: substance                           # body-of-the-body — the payload
+    heading: "THIS WEEK"
+    field_type: bullets
+    subfields:                               # three payload lanes, all optional
+      - key: highlights        field_type: bullets
+      - key: decisions         field_type: bullets
+      - key: risks_blockers    field_type: checked_bullets   # bullet + source,
+                                                               # reuses page-truth-brief's type
+  - key: trajectory                          # footer-of-the-body — forward-looking
+    heading: "NEXT"
+    field_type: kv_list
+    fields: [next_actions, asks_of_sconl, next_brief_date]
+footer_note: standing_metadata               # distribution list, confidentiality,
+                                              # link to full detail/dashboard if one exists
+filename_fields: [subject_type, subject_id]
+governance: false            # opt-in per instance, not the archetype default — a
+                              # weekly cadence is high-frequency/low-ceremony by design;
+                              # an individual brief can still set governance: true
+                              # per §9 if a specific week's content warrants it
+cadence: weekly              # NEW field, first archetype to declare one — see below
+```
+
+**Naming profile**, following §5's fixed shape (two id slots, version,
+date):
+
+```
+{subject_type}_{subject_id}_v{major}_{minor}_{patch}_{YYYYMMDD}.{ext}
+```
+
+`subject_type` (`team`, `project`, `supervisor`, `initiative`, `company`)
+is the first slot rather than a fixed constant, because unlike
+`page-truth-brief` (where "site" is the only kind of thing being
+documented), a weekly brief's *subject* can be several different kinds
+of thing sharing the drive's ID-slug space — the type slot disambiguates
+`viva-valentia` the org from a same-named project or supervisor, and
+keeps the filename mechanically sortable by kind before falling back to
+name, matching Alex's own "identifying slots first, version, date last"
+rule (§5) without inventing a new shape for this archetype.
+
+**`cadence: weekly` is a new archetype-level field, not present in
+`page-truth-brief`** — it does not change how `doc-builder.js` or a
+renderer works (rendering is always triggered by a content JSON existing
+and being handed to the builder, exactly as before); it is metadata a
+*scheduler* reads to decide when to prompt for/assemble that content in
+the first place. **The scheduler itself is not designed here** — see
+`PA26082012` in `plan.md` for the open scoping questions this raises
+(where the list of "active subjects" is enumerated from across
+`career/orgs/`, `scope`'s projects, and `circle`'s people/supervisor
+records; where a company Architect owns himself would live, since
+`career/orgs/` per [[viva-is-one-org-instance-not-the-whole-career]] is
+currently modeled as engagements-he-works-within, not
+ventures-he-owns; and what actually fires the Friday trigger — a
+`CronCreate` scheduled agent, a `pulse` calendar recurrence, or a
+`scope` recurring-task row).
+
+**Output location** mirrors §6's shape but is not yet confirmed the same
+way §6 was for `page-truth-brief` — proposed
+`career/orgs/<org_id>/weekly-briefs/<subject_type>/<subject_id>/` for
+anything engagement-scoped, but a **first-party company Architect owns
+himself has no home in `career/orgs/` at all today** (that tree models
+engagements, not ownership) — this is one of `PA26082012`'s open
+questions, not resolved here.
 
 ---
 
