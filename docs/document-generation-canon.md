@@ -90,7 +90,12 @@ actually vary (data) versus what never changes between them (structure/style):
 neutral node tree (`{type: 'heading', level: 1, text, style}`,
 `{type: 'bullets', items}`, `{type: 'kv', label, value}`, etc.). Each
 renderer walks that same tree — nothing format-specific leaks upstream of
-the renderer boundary. **No AI calls happen anywhere in this pipeline.**
+the renderer boundary. **No AI calls happen anywhere in this render
+pipeline** (build → node tree → renderer) — that stays absolute, and
+`BA26081812` doesn't touch it. What §8 below now describes (revised
+20 Aug 2026, `BA26081812`) is AI proposing FIELD VALUES *before* content
+ever reaches this pipeline — the render path itself remains exactly as
+deterministic as this section says.
 
 ---
 
@@ -461,22 +466,39 @@ like a WAMCA brief regardless of which format someone opens.
 
 ---
 
-## 8. Editing, and where AI actually enters
+## 8. Editing, and where AI actually enters (revised 20 Aug 2026, `BA26081812`)
 
 "Document editing" in this system means editing the `.content.json` field
 (or one section of it) and re-running the renderer — not asking an AI to
-reproduce the whole document with one line changed. Two genuinely different
-kinds of edit:
+reproduce the whole document with one line changed. Three kinds of edit
+now, not two — the third is genuinely new capability, not a rewording of
+the other two:
 
 - **Mechanical edit** (fix a date, a URL, a version bump, swap a bullet's
   wording that Architect already knows) — direct JSON edit, re-render. Zero AI
   calls, zero tokens.
-- **Drafting edit** (write the "what we can say here" bullets for a new
-  page from the truth document) — this is the one place `spark` (once
-  wired) is invoked, and only for the specific field(s) being drafted, with
-  the archetype's field description as the prompt scope — never "regenerate
-  the document." This is the token-minimizing design: the model drafts
+- **Drafting edit, per field** (write the "what we can say here" bullets
+  for a new page from the truth document) — `spark` is invoked for the
+  specific field being drafted, given a brief plus the other fields
+  already filled in as context, with the archetype's field description as
+  the prompt scope — never "regenerate the document." Built as
+  `spark/lib/writer-assist.js`'s `researchField()`, called via Writer's
+  per-field ✨ affordance (`POST /api/writer/research-field`). This is the
+  token-minimizing design the original §8 described: the model drafts
   sentences, the engine owns everything else.
+- **Full draft** (added `BA26081812`, "for when we need work done fast") —
+  one brief, one call, every field of the archetype proposed at once
+  (`spark/lib/writer-assist.js`'s `fullDraft()`, `POST /api/writer/full-
+  draft`). This is the one place this canon's scope genuinely widens past
+  the original per-field-only design: a single call now drafts an entire
+  document's content, not one field. The boundary that doesn't move: AI
+  output in EITHER mode is always just field values landing in the same
+  input controls manual entry uses — always reviewable/editable in the
+  form before Generate, never a silent unreviewed draft, and never touches
+  layout, style, or the render pipeline itself (§1 stays absolute for
+  that). `spark`'s AI-calling layer (`lib/ai-provider.js`) is Groq-backed,
+  Architect's own 20 Aug decision — the fleet's first real AI-model
+  integration, not specific to Writer, though this is its first use.
 
 ---
 
