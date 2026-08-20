@@ -60,7 +60,7 @@ test('recordGenerated pushes to OneDrive and stores the real webUrl for a Genera
   assert.equal(row.ONEDRIVE_WEBURL, 'https://onedrive.example/general-doc');
 });
 
-test('recordGenerated does NOT push to OneDrive for project/engagement targets (data-source mismatch, deliberately unbuilt)', async () => {
+test('recordGenerated does NOT push to OneDrive for project targets (data-source mismatch, deliberately unbuilt)', async () => {
   const store = makeStore();
   let called = false;
   const uploadFile = async () => { called = true; return 'https://should-not-be-called'; };
@@ -71,6 +71,30 @@ test('recordGenerated does NOT push to OneDrive for project/engagement targets (
   assert.equal(called, false);
   assert.equal(r.webUrl, null);
   assert.equal(store.data['scope/generated_docs.tsv'][0].ONEDRIVE_WEBURL, '-');
+});
+
+test('recordGenerated pushes an engagement target into its real discovered OneDrive folder (BA26081803)', async () => {
+  const store = makeStore();
+  let uploadCall = null;
+  const uploadFile = async (folderPath, fileName) => { uploadCall = { folderPath, fileName }; return 'https://onedrive.example/viva-doc'; };
+  const resolveEngagementFolder = async (orgId) => (orgId === 'viva-valentia' ? '2026-viva-valentia' : orgId);
+  const client = createDocsRegistryClient({ ...store, uploadFile, resolveEngagementFolder });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-test-'));
+  const written = fakeWritten(dir, { docx: 'doc.docx' });
+  const r = await client.recordGenerated({ archetypeId: 'decision-brief', targetKind: 'engagement', targetId: 'viva-valentia', written, version: '0.1.0' });
+  assert.equal(r.webUrl, 'https://onedrive.example/viva-doc');
+  assert.equal(uploadCall.folderPath, 'Sconl/Core/Axial/Visionary/Corporate/2026-viva-valentia');
+});
+
+test('recordGenerated falls back to the bare org id for an engagement with no resolvable OneDrive folder', async () => {
+  const store = makeStore();
+  let uploadCall = null;
+  const uploadFile = async (folderPath, fileName) => { uploadCall = { folderPath, fileName }; return 'https://onedrive.example/hand-added-doc'; };
+  const client = createDocsRegistryClient({ ...store, uploadFile }); // default resolveEngagementFolder passthrough
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-test-'));
+  const written = fakeWritten(dir, { docx: 'doc.docx' });
+  await client.recordGenerated({ archetypeId: 'decision-brief', targetKind: 'engagement', targetId: 'hand-added-org', written, version: '0.1.0' });
+  assert.equal(uploadCall.folderPath, 'Sconl/Core/Axial/Visionary/Corporate/hand-added-org');
 });
 
 test('recordGenerated still indexes the row locally even when the OneDrive push fails', async () => {
