@@ -112,7 +112,7 @@ async function main() {
   const decisions = createDecisionsClient({ readTSV, auditLog, getCareerContext });
   const plans = createPlansClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const corporate = createCorporateClient({ readTSV, auditLog, getCareerContext });
-  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV });
+  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV, uploadFile: store.uploadFile });
   // BA26081811: local disk root for generated documents -- independent of
   // the OneDrive root question BA26081803/BA26081813 are still blocked on
   // (corporate-engagement org-slug, project/general root); this is purely

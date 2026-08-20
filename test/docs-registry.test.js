@@ -36,13 +36,53 @@ test('recordGenerated indexes the docx (preferred over md/pdf) as the primary fi
   const client = createDocsRegistryClient(store);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-test-'));
   const written = fakeWritten(dir, { md: 'doc.md', docx: 'doc.docx', 'content.json': 'doc.content.json' });
-  const id = await client.recordGenerated({ archetypeId: 'decision-brief', targetKind: 'project', targetId: 'p1', targetLabel: 'Project One', written, version: '0.1.0' });
-  assert.ok(id);
+  const r = await client.recordGenerated({ archetypeId: 'decision-brief', targetKind: 'project', targetId: 'p1', targetLabel: 'Project One', written, version: '0.1.0' });
+  assert.ok(r.id);
   const rows = store.data['scope/generated_docs.tsv'];
   assert.equal(rows.length, 1);
   assert.equal(rows[0].FILENAME, 'doc.docx');
   assert.equal(rows[0].STATUS, 'active');
   assert.equal(rows[0].TARGET_ID, 'p1');
+});
+
+test('recordGenerated pushes to OneDrive and stores the real webUrl for a General target', async () => {
+  const store = makeStore();
+  let uploadCall = null;
+  const uploadFile = async (folderPath, fileName, buffer, contentType) => { uploadCall = { folderPath, fileName, contentType }; return 'https://onedrive.example/general-doc'; };
+  const client = createDocsRegistryClient({ ...store, uploadFile });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-test-'));
+  const written = fakeWritten(dir, { docx: 'doc.docx', 'content.json': 'doc.content.json' });
+  const r = await client.recordGenerated({ archetypeId: 'email', targetKind: 'general', written, version: '0.1.0' });
+  assert.equal(r.webUrl, 'https://onedrive.example/general-doc');
+  assert.equal(uploadCall.folderPath, 'Sconl/Core/Axial/Visionary/Writer/general');
+  assert.equal(uploadCall.fileName, 'doc.docx');
+  const row = store.data['scope/generated_docs.tsv'][0];
+  assert.equal(row.ONEDRIVE_WEBURL, 'https://onedrive.example/general-doc');
+});
+
+test('recordGenerated does NOT push to OneDrive for project/engagement targets (data-source mismatch, deliberately unbuilt)', async () => {
+  const store = makeStore();
+  let called = false;
+  const uploadFile = async () => { called = true; return 'https://should-not-be-called'; };
+  const client = createDocsRegistryClient({ ...store, uploadFile });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-test-'));
+  const written = fakeWritten(dir, { docx: 'doc.docx' });
+  const r = await client.recordGenerated({ archetypeId: 'decision-brief', targetKind: 'project', targetId: 'p1', written, version: '0.1.0' });
+  assert.equal(called, false);
+  assert.equal(r.webUrl, null);
+  assert.equal(store.data['scope/generated_docs.tsv'][0].ONEDRIVE_WEBURL, '-');
+});
+
+test('recordGenerated still indexes the row locally even when the OneDrive push fails', async () => {
+  const store = makeStore();
+  const uploadFile = async () => { throw new Error('graph down'); };
+  const client = createDocsRegistryClient({ ...store, uploadFile });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-test-'));
+  const written = fakeWritten(dir, { docx: 'doc.docx' });
+  const r = await client.recordGenerated({ archetypeId: 'email', targetKind: 'general', written, version: '0.1.0' });
+  assert.ok(r.id);
+  assert.equal(r.webUrl, null);
+  assert.equal(store.data['scope/generated_docs.tsv'][0].STATUS, 'active');
 });
 
 test('listDocs excludes deleted rows by default, and filters by archetype/targetKind/status', async () => {

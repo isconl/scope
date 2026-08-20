@@ -33,7 +33,7 @@ test('generate() never writes when no outputRoot is configured anywhere (existin
 test('generate() calls docsRegistry.recordGenerated with the target fields when a write happens', async () => {
   const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gc-test-'));
   let recorded = null;
-  const docsRegistry = { recordGenerated: async (p) => { recorded = p; return 'GD0001'; } };
+  const docsRegistry = { recordGenerated: async (p) => { recorded = p; return { id: 'GD0001', webUrl: null }; } };
   const client = createGenerateClient({ outputRoot, docsRegistry });
   const r = await client.generate({
     namespace: '_common', archetypeId: 'decision-brief', targetKind: 'project', targetId: 'p1', targetLabel: 'Project One',
