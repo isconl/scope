@@ -16,6 +16,7 @@ const { createDecisionsClient } = require('../lib/decisions');
 const { createPlansClient } = require('../lib/plans');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
+const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
 const manifest = require('../lib/manifest');
 const httpLib = require('http');
 const httpsLib = require('https');
@@ -111,7 +112,15 @@ async function main() {
   const decisions = createDecisionsClient({ readTSV, auditLog, getCareerContext });
   const plans = createPlansClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const corporate = createCorporateClient({ readTSV, auditLog, getCareerContext });
-  const generate = createGenerateClient({ auditLog });
+  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV });
+  // BA26081811: local disk root for generated documents -- independent of
+  // the OneDrive root question BA26081803/BA26081813 are still blocked on
+  // (corporate-engagement org-slug, project/general root); this is purely
+  // where the engine's own copy lives so there's something for
+  // generated_docs.tsv to index and Download to stream. GENERATED_DOCS_ROOT
+  // overrides for deploys where scope's own disk isn't durable/local.
+  const GENERATED_DOCS_ROOT = process.env.GENERATED_DOCS_ROOT || path.join(__dirname, '..', 'generated');
+  const generate = createGenerateClient({ auditLog, docsRegistry, outputRoot: GENERATED_DOCS_ROOT });
 
   const tokenConfigured = !!(process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN || secretStore.get('SCOPE_TOKEN'));
   const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(BIND);
@@ -205,6 +214,33 @@ async function main() {
       }
       if (pathname === '/generate' && req.method === 'POST') {
         return sendJson(res, 200, await generate.generate(JSON.parse(await readBody(req) || '{}')));
+      }
+
+      // BA26081811: the generated-documents registry.
+      if (pathname === '/generate/docs' && req.method === 'GET') {
+        const docs = await docsRegistry.listDocs({
+          archetypeId: url.searchParams.get('archetypeId') || undefined,
+          targetKind: url.searchParams.get('targetKind') || undefined,
+          status: url.searchParams.get('status') || undefined,
+        });
+        return sendJson(res, 200, { docs });
+      }
+      if (pathname === '/generate/docs/update' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        return sendJson(res, 200, await docsRegistry.updateDoc(p.id, { status: p.status }));
+      }
+      if (pathname === '/generate/docs/download' && req.method === 'GET') {
+        return sendJson(res, 200, await docsRegistry.downloadDoc(url.searchParams.get('id')));
+      }
+      if (pathname === '/generate/docs/content' && req.method === 'GET') {
+        return sendJson(res, 200, await docsRegistry.getContent(url.searchParams.get('id')));
+      }
+      if (pathname === '/generate/docs/tasks' && req.method === 'GET') {
+        return sendJson(res, 200, { tasks: await docsRegistry.tasksForDoc(url.searchParams.get('id')) });
+      }
+      if (pathname === '/generate/docs/attach' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        return sendJson(res, 200, await docsRegistry.attachToTask(p.id, p.taskId));
       }
     } catch (e) {
       return sendJson(res, 400, { success: false, error: String(e.message || e) });
