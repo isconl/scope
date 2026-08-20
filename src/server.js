@@ -112,7 +112,15 @@ async function main() {
   const decisions = createDecisionsClient({ readTSV, auditLog, getCareerContext });
   const plans = createPlansClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const corporate = createCorporateClient({ readTSV, auditLog, getCareerContext });
-  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV, uploadFile: store.uploadFile });
+  // BA26081803: resolve an engagement's real OneDrive folder for the
+  // Writer push, via the same getCareerContext() every other cross-engine
+  // reach to circle already uses -- not a second HTTP client.
+  const resolveEngagementFolder = async (orgId) => {
+    const ctx = await getCareerContext();
+    const org = (ctx.orgs || []).find(o => o.id === orgId);
+    return (org && org.onedriveFolder) || orgId;
+  };
+  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV, uploadFile: store.uploadFile, resolveEngagementFolder });
   // BA26081811: local disk root for generated documents -- independent of
   // the OneDrive root question BA26081803/BA26081813 are still blocked on
   // (corporate-engagement org-slug, project/general root); this is purely

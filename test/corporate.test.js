@@ -45,6 +45,23 @@ test('getEngagement returns tasks tagged by ORG_ID alongside full detail for the
   assert.equal(eng.tasks.length, 2);
 });
 
+test('getEngagement resolves onedriveFolder from career context, falling back to the bare id when unset (BA26081803)', async () => {
+  const client = createCorporateClient({
+    readTSV: makeReadTSV({ 'scope/tasks.tsv': [] }),
+    getCareerContext: async () => ({
+      activeOrg: null,
+      orgs: [
+        { id: 'tenant-one', name: 'Tenant One', onedriveFolder: '2026-tenant-one' },
+        { id: 'hand-added-org', name: 'Hand Added Org' }, // no onedriveFolder -- e.g. entered by hand, never discovered
+      ],
+    }),
+  });
+  const withFolder = await client.getEngagement('tenant-one');
+  assert.equal(withFolder.onedriveFolder, '2026-tenant-one');
+  const withoutFolder = await client.getEngagement('hand-added-org');
+  assert.equal(withoutFolder.onedriveFolder, 'hand-added-org');
+});
+
 test('getEngagement returns an empty tasks list for an org nothing is tagged to', async () => {
   const client = createCorporateClient({
     readTSV: makeReadTSV({ 'scope/tasks.tsv': TASKS }),
