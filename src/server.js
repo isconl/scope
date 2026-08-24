@@ -14,6 +14,7 @@ const { createTasksClient } = require('../lib/tasks');
 const { createJiraGateClient } = require('../lib/jira-gate');
 const { createDecisionsClient } = require('../lib/decisions');
 const { createPlansClient } = require('../lib/plans');
+const { createSurfacedTasksClient } = require('../lib/surfaced-tasks');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
 const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
@@ -111,6 +112,7 @@ async function main() {
 
   const decisions = createDecisionsClient({ readTSV, auditLog, getCareerContext });
   const plans = createPlansClient({ readTSV, appendTSV, rewriteTSV, auditLog });
+  const surfacedTasks = createSurfacedTasksClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const corporate = createCorporateClient({ readTSV, auditLog, getCareerContext });
   // BA26081803: resolve an engagement's real OneDrive folder for the
   // Writer push, via the same getCareerContext() every other cross-engine
@@ -214,6 +216,16 @@ async function main() {
       }
       if (pathname === '/plans/update' && req.method === 'POST') {
         return sendJson(res, 200, await plans.updatePlan(JSON.parse(await readBody(req) || '{}')));
+      }
+
+      if (pathname === '/surfaced-tasks' && req.method === 'GET') {
+        return sendJson(res, 200, { items: await surfacedTasks.listSurfaced({ status: url.searchParams.get('status') }) });
+      }
+      if (pathname === '/surfaced-tasks/add' && req.method === 'POST') {
+        return sendJson(res, 200, await surfacedTasks.addSurfaced(JSON.parse(await readBody(req) || '{}')));
+      }
+      if (pathname === '/surfaced-tasks/update' && req.method === 'POST') {
+        return sendJson(res, 200, await surfacedTasks.updateSurfaced(JSON.parse(await readBody(req) || '{}')));
       }
 
       if (pathname === '/corporate' && req.method === 'GET') {
