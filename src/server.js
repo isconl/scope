@@ -120,7 +120,18 @@ async function main() {
     const org = (ctx.orgs || []).find(o => o.id === orgId);
     return (org && org.onedriveFolder) || orgId;
   };
-  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV, uploadFile: store.uploadFile, resolveEngagementFolder });
+  // BA26082402: resolve a venture's real OneDrive folder for the Writer
+  // push, straight off pulse/finance/ventures.tsv's own FOLDER column --
+  // same vault store this engine already reads everything else through,
+  // no second HTTP client needed (ventures.tsv isn't scope's own file, but
+  // vault serves every collection regardless of which engine owns it).
+  const resolveProjectFolder = async (ventureId) => {
+    const ventures = await readTSV('finance/ventures.tsv');
+    const venture = ventures.find(v => v.ID === ventureId);
+    const folder = venture && venture.FOLDER;
+    return (folder && folder !== '-') ? folder : null;
+  };
+  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV, uploadFile: store.uploadFile, resolveEngagementFolder, resolveProjectFolder });
   // BA26081811: local disk root for generated documents -- independent of
   // the OneDrive root question BA26081803/BA26081813 are still blocked on
   // (corporate-engagement org-slug, project/general root); this is purely

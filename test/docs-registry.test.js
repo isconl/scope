@@ -60,7 +60,7 @@ test('recordGenerated pushes to OneDrive and stores the real webUrl for a Genera
   assert.equal(row.ONEDRIVE_WEBURL, 'https://onedrive.example/general-doc');
 });
 
-test('recordGenerated does NOT push to OneDrive for project targets (data-source mismatch, deliberately unbuilt)', async () => {
+test('recordGenerated with no resolveProjectFolder injected does NOT push a project target (default passthrough returns null)', async () => {
   const store = makeStore();
   let called = false;
   const uploadFile = async () => { called = true; return 'https://should-not-be-called'; };
@@ -68,6 +68,33 @@ test('recordGenerated does NOT push to OneDrive for project targets (data-source
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-test-'));
   const written = fakeWritten(dir, { docx: 'doc.docx' });
   const r = await client.recordGenerated({ archetypeId: 'decision-brief', targetKind: 'project', targetId: 'p1', written, version: '0.1.0' });
+  assert.equal(called, false);
+  assert.equal(r.webUrl, null);
+  assert.equal(store.data['scope/generated_docs.tsv'][0].ONEDRIVE_WEBURL, '-');
+});
+
+test('recordGenerated pushes a project target straight into ventures.tsv\'s own FOLDER path, no root-prefixing (BA26082402)', async () => {
+  const store = makeStore();
+  let uploadCall = null;
+  const uploadFile = async (folderPath, fileName) => { uploadCall = { folderPath, fileName }; return 'https://onedrive.example/aquifer-doc'; };
+  const resolveProjectFolder = async (ventureId) => (ventureId === 'aquifer' ? 'Sconl/Core/Axial/Innovator/Engineer/engineer-systems/Portfolio/aquifer-content' : null);
+  const client = createDocsRegistryClient({ ...store, uploadFile, resolveProjectFolder });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-test-'));
+  const written = fakeWritten(dir, { docx: 'doc.docx' });
+  const r = await client.recordGenerated({ archetypeId: 'decision-brief', targetKind: 'project', targetId: 'aquifer', written, version: '0.1.0' });
+  assert.equal(r.webUrl, 'https://onedrive.example/aquifer-doc');
+  assert.equal(uploadCall.folderPath, 'Sconl/Core/Axial/Innovator/Engineer/engineer-systems/Portfolio/aquifer-content');
+});
+
+test('recordGenerated refuses the push (no guessed fallback) for a venture with no FOLDER assigned', async () => {
+  const store = makeStore();
+  let called = false;
+  const uploadFile = async () => { called = true; return 'https://should-not-be-called'; };
+  const resolveProjectFolder = async () => null;   // e.g. ventures.tsv's FOLDER: '-'
+  const client = createDocsRegistryClient({ ...store, uploadFile, resolveProjectFolder });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-test-'));
+  const written = fakeWritten(dir, { docx: 'doc.docx' });
+  const r = await client.recordGenerated({ archetypeId: 'decision-brief', targetKind: 'project', targetId: 'acexoft-dynamics', written, version: '0.1.0' });
   assert.equal(called, false);
   assert.equal(r.webUrl, null);
   assert.equal(store.data['scope/generated_docs.tsv'][0].ONEDRIVE_WEBURL, '-');
