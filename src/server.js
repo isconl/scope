@@ -14,6 +14,7 @@ const { createTasksClient } = require('../lib/tasks');
 const { createJiraGateClient } = require('../lib/jira-gate');
 const { createDecisionsClient } = require('../lib/decisions');
 const { createPlansClient } = require('../lib/plans');
+const { createPlanningInsightsClient } = require('../lib/planning-insights');
 const { createSurfacedTasksClient } = require('../lib/surfaced-tasks');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
@@ -112,6 +113,7 @@ async function main() {
 
   const decisions = createDecisionsClient({ readTSV, auditLog, getCareerContext });
   const plans = createPlansClient({ readTSV, appendTSV, rewriteTSV, auditLog });
+  const planningInsights = createPlanningInsightsClient({ readTSV, appendTSV, auditLog });
   const surfacedTasks = createSurfacedTasksClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const corporate = createCorporateClient({ readTSV, auditLog, getCareerContext });
   // BA26081803: resolve an engagement's real OneDrive folder for the
@@ -232,6 +234,15 @@ async function main() {
       }
       if (pathname === '/plans/update' && req.method === 'POST') {
         return sendJson(res, 200, await plans.updatePlan(JSON.parse(await readBody(req) || '{}')));
+      }
+
+      // BT26082601: curated planning-insight database, one-time build+run
+      // (not the ongoing daily cron PT26082003 sketches).
+      if (pathname === '/planning-insights' && req.method === 'GET') {
+        return sendJson(res, 200, await planningInsights.listInsights());
+      }
+      if (pathname === '/planning-insights/curate' && req.method === 'POST') {
+        return sendJson(res, 200, await planningInsights.runCuration());
       }
 
       if (pathname === '/surfaced-tasks' && req.method === 'GET') {
