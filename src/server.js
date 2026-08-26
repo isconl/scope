@@ -8,7 +8,7 @@ const http = require('http');
 const path = require('path');
 const secretStore = require('../lib/secrets');
 const { createAuditLog } = require('../lib/audit');
-const { createStore } = require('../lib/store');
+const { createStore, defaultRequest } = require('../lib/store');
 const { createJiraClient } = require('../lib/jira');
 const { createTasksClient } = require('../lib/tasks');
 const { createJiraGateClient } = require('../lib/jira-gate');
@@ -18,6 +18,8 @@ const { createPlanningInsightsClient } = require('../lib/planning-insights');
 const { createSurfacedTasksClient } = require('../lib/surfaced-tasks');
 const { createPortalPartiesClient } = require('../lib/portal-parties');
 const { createBufferClient } = require('../lib/buffer');
+const { createActiveSubjectsClient } = require('../lib/active-subjects');
+const { createStatusBriefClient } = require('../lib/status-brief');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
 const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
@@ -29,6 +31,7 @@ const PORT = parseInt(process.env.SCOPE_PORT || process.env.PORT || '8083', 10);
 const BIND = process.env.SCOPE_BIND || '127.0.0.1';
 const VAULT_URL = process.env.VAULT_URL || '';
 const CIRCLE_URL = process.env.CIRCLE_URL || '';
+const SPARK_URL = process.env.SPARK_URL || '';
 const LOGS_DIR = process.env.SCOPE_LOGS_DIR || path.join(__dirname, '..', 'runtime', 'logs');
 
 function readBody(req) {
@@ -119,6 +122,49 @@ async function main() {
   const planningInsights = createPlanningInsightsClient({ readTSV, appendTSV, auditLog });
   const surfacedTasks = createSurfacedTasksClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const portalParties = createPortalPartiesClient({ readTSV, appendTSV, auditLog });
+  const activeSubjects = createActiveSubjectsClient({ readTSV, appendTSV, rewriteTSV, auditLog, getCareerContext });
+
+  // BA26082420: scope -> spark (draft the brief) and scope -> vault (send
+  // it via BI26082419's Mail.Send wrapper), same cross-engine pattern as
+  // getCareerContext above (scope -> circle).
+  const sparkRequest = SPARK_URL ? defaultRequest(SPARK_URL, () => secretStore.get('SPARK_TOKEN')) : null;
+  const callSpark = async (query) => {
+    if (!sparkRequest) return { ok: false, error: 'SPARK_URL not configured' };
+    const r = await sparkRequest('POST', '/generate-status-brief', query);
+    if (r.status !== 200) return { ok: false, error: (r.data && r.data.error) || `spark returned ${r.status}` };
+    return { ok: true, data: r.data };
+  };
+  const vaultMailRequest = VAULT_URL ? defaultRequest(VAULT_URL, () => secretStore.get('VAULT_TOKEN')) : null;
+  const sendMailCrossEngine = async ({ to, subject, body }) => {
+    if (!vaultMailRequest) return { ok: false, error: 'VAULT_URL not configured' };
+    const r = await vaultMailRequest('POST', '/graph/mail/send', { to, subject, body });
+    if (r.status !== 200) return { ok: false, error: (r.data && r.data.error) || `vault returned ${r.status}` };
+    return { ok: true };
+  };
+  const statusBrief = createStatusBriefClient({ readTSV, appendTSV, rewriteTSV, auditLog, callSpark, sendMail: sendMailCrossEngine });
+
+  // Friday auto-draft. NOT built on CronCreate (a Claude Code session
+  // scheduling tool -- session-only, dies when the session ends, auto-
+  // expires after 7 days -- wrong mechanism entirely for a durable weekly
+  // job). Same in-process setInterval pattern vault/lib/sync-loop.js
+  // already uses for its own periodic work: checks once a day whether
+  // today is Friday and this week's batch hasn't run yet, tracked by a
+  // plain in-memory "last run" week-stamp (resets on restart, which is
+  // fine -- a missed Friday during a restart window just drafts on the
+  // next daily check, not silently skipped forever).
+  let lastFridayRun = null;
+  const FRIDAY = 5;
+  const fridayTimer = setInterval(async () => {
+    const now = new Date();
+    if (now.getDay() !== FRIDAY) return;
+    const weekStamp = statusBrief.mondayOf(now);
+    if (lastFridayRun === weekStamp) return;
+    lastFridayRun = weekStamp;
+    const r = await statusBrief.draftAllBriefs().catch(e => ({ drafted: 0, error: String(e.message || e) }));
+    auditLog.log('status_brief_friday_run', r);
+  }, 24 * 60 * 60 * 1000);
+  if (fridayTimer.unref) fridayTimer.unref(); // never keeps the process alive on its own
+
   const corporate = createCorporateClient({ readTSV, auditLog, getCareerContext });
   // BA26081803: resolve an engagement's real OneDrive folder for the
   // Writer push, via the same getCareerContext() every other cross-engine
@@ -306,6 +352,28 @@ async function main() {
       }
       if (pathname === '/portal/deal-flow-parties/add' && req.method === 'POST') {
         return sendJson(res, 200, await portalParties.addDealFlowParty(JSON.parse(await readBody(req) || '{}')));
+      }
+
+      // BA26082420: weekly status-brief -- subject registry, drafts, send.
+      if (pathname === '/active-subjects' && req.method === 'GET') {
+        return sendJson(res, 200, { subjects: await activeSubjects.listSubjects() });
+      }
+      if (pathname === '/active-subjects/sync' && req.method === 'POST') {
+        return sendJson(res, 200, await activeSubjects.syncFromCareer());
+      }
+      if (pathname === '/active-subjects/owner' && req.method === 'POST') {
+        return sendJson(res, 200, await activeSubjects.addOwnerSubject(JSON.parse(await readBody(req) || '{}')));
+      }
+      if (pathname === '/status-briefs' && req.method === 'GET') {
+        return sendJson(res, 200, { briefs: await statusBrief.listBriefs({ subjectId: url.searchParams.get('subjectId') }) });
+      }
+      if (pathname === '/status-briefs/draft' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        return sendJson(res, 200, p.subjectId ? await statusBrief.draftBrief(p.subjectId) : await statusBrief.draftAllBriefs());
+      }
+      if (pathname === '/status-briefs/send' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        return sendJson(res, 200, await statusBrief.sendBrief(p.briefId, { via: p.via, to: p.to }));
       }
 
       if (pathname === '/corporate' && req.method === 'GET') {
