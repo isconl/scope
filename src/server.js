@@ -43,7 +43,7 @@ function sendJson(res, status, obj) {
 }
 
 function checkAuth(req) {
-  const token = process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN || secretStore.get('SCOPE_TOKEN') || '';
+  const token = secretStore.get('SCOPE_TOKEN', process.env.ISCONL_TOKEN || '');
   if (!token) return false;
   const auth = req.headers.authorization || '';
   const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
@@ -61,16 +61,16 @@ async function main() {
   }
   const store = createStore({
     baseUrl: VAULT_URL,
-    getToken: () => process.env.VAULT_TOKEN || secretStore.get('VAULT_TOKEN') || '',
+    getToken: () => secretStore.get('VAULT_TOKEN'),
     auditLog,
   });
   const readTSV = store.read, appendTSV = store.append, rewriteTSV = store.rewrite;
 
   const getJiraConfig = () => ({
-    host: process.env.JIRA_HOST || secretStore.get('JIRA_HOST') || '',
-    email: process.env.JIRA_EMAIL || secretStore.get('JIRA_EMAIL') || '',
-    token: secretStore.get('JIRA_API_TOKEN') || '',
-    projectKey: process.env.JIRA_PROJECT || secretStore.get('JIRA_PROJECT') || '',
+    host: secretStore.get('JIRA_HOST'),
+    email: secretStore.get('JIRA_EMAIL'),
+    token: secretStore.get('JIRA_API_TOKEN'),
+    projectKey: secretStore.get('JIRA_PROJECT'),
   });
   const jira = createJiraClient({ getConfig: getJiraConfig, auditLog });
   const jiraConfigured = () => { const c = getJiraConfig(); return !!(c.host && c.email && c.token); };
@@ -94,7 +94,7 @@ async function main() {
     if (!CIRCLE_URL) return { activeOrg: null, orgName: null, orgs: [], people: [], decisions: [], risks: [], playbooks: [], doctrine: {}, available: false };
     const url = new URL('/career', CIRCLE_URL);
     const lib = url.protocol === 'https:' ? httpsLib : httpLib;
-    const token = process.env.CIRCLE_TOKEN || secretStore.get('CIRCLE_TOKEN') || '';
+    const token = secretStore.get('CIRCLE_TOKEN');
     return new Promise((resolve) => {
       const req = lib.request(url, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }, (res) => {
         let raw = '';
@@ -143,7 +143,7 @@ async function main() {
   const GENERATED_DOCS_ROOT = process.env.GENERATED_DOCS_ROOT || path.join(__dirname, '..', 'generated');
   const generate = createGenerateClient({ auditLog, docsRegistry, outputRoot: GENERATED_DOCS_ROOT });
 
-  const tokenConfigured = !!(process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN || secretStore.get('SCOPE_TOKEN'));
+  const tokenConfigured = !!secretStore.get('SCOPE_TOKEN', process.env.ISCONL_TOKEN || '');
   const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(BIND);
   if (!isLoopback && !tokenConfigured) {
     console.error('  REFUSING TO BIND: no SCOPE_TOKEN/ISCONL_TOKEN configured and BIND is not loopback.');
@@ -190,6 +190,22 @@ async function main() {
       }
       if (pathname === '/tasks/done' && req.method === 'POST') {
         return sendJson(res, 200, { success: true, ...(await tasks.completeTask(JSON.parse(await readBody(req) || '{}'))) });
+      }
+      // BT26082413: explicit start/stop UI action, never inferred from
+      // opening the task -- see tasks.js's own comment on why.
+      if (pathname === '/tasks/session/start' && req.method === 'POST') {
+        const { taskId } = JSON.parse(await readBody(req) || '{}');
+        try { return sendJson(res, 200, await tasks.startTaskSession(taskId)); }
+        catch (e) { return sendJson(res, 400, { success: false, error: e.message }); }
+      }
+      if (pathname === '/tasks/session/stop' && req.method === 'POST') {
+        const { taskId } = JSON.parse(await readBody(req) || '{}');
+        try { return sendJson(res, 200, await tasks.stopTaskSession(taskId)); }
+        catch (e) { return sendJson(res, 400, { success: false, error: e.message }); }
+      }
+      if (pathname === '/tasks/session/list' && req.method === 'GET') {
+        const taskId = url.searchParams.get('taskId');
+        return sendJson(res, 200, { sessions: await tasks.getTaskSessions(taskId) });
       }
 
       if (pathname === '/jira/preview' && req.method === 'POST') {
