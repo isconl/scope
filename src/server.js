@@ -221,6 +221,19 @@ async function main() {
         return sendJson(res, r.blocked ? 409 : (r.success ? 200 : 502), r);
       }
 
+      // BX26082422 read side -- issue/comments/projects, safe (no
+      // gating needed, this is read-only). Write-side gating design is
+      // NOT built here -- see plan.md, needs Architect's sign-off first.
+      if (pathname === '/jira/issue' && req.method === 'GET') {
+        return sendJson(res, 200, await jira.jiraGetIssue(url.searchParams.get('key')));
+      }
+      if (pathname === '/jira/comments' && req.method === 'GET') {
+        return sendJson(res, 200, { comments: await jira.jiraGetComments(url.searchParams.get('key')) });
+      }
+      if (pathname === '/jira/projects' && req.method === 'GET') {
+        return sendJson(res, 200, { projects: await jira.jiraListProjects() });
+      }
+
       if (pathname === '/decisions' && req.method === 'GET') {
         return sendJson(res, 200, await decisions.listDecisions());
       }
