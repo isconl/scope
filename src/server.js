@@ -17,6 +17,7 @@ const { createPlansClient } = require('../lib/plans');
 const { createPlanningInsightsClient } = require('../lib/planning-insights');
 const { createSurfacedTasksClient } = require('../lib/surfaced-tasks');
 const { createPortalPartiesClient } = require('../lib/portal-parties');
+const { createBufferClient } = require('../lib/buffer');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
 const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
@@ -75,6 +76,7 @@ async function main() {
     projectKey: secretStore.get('JIRA_PROJECT'),
   });
   const jira = createJiraClient({ getConfig: getJiraConfig, auditLog });
+  const buffer = createBufferClient({ getApiKey: () => secretStore.get('BUFFER_API_KEY_SCONL'), auditLog });
   const jiraConfigured = () => { const c = getJiraConfig(); return !!(c.host && c.email && c.token); };
 
   // Snapshot at boot: secrets are loaded before the server starts accepting
@@ -232,6 +234,25 @@ async function main() {
       }
       if (pathname === '/jira/projects' && req.method === 'GET') {
         return sendJson(res, 200, { projects: await jira.jiraListProjects() });
+      }
+
+      // BX26082423: Buffer scaffolding + API wiring only -- no content
+      // generation, schedules already-authored text only.
+      if (pathname === '/buffer/organizations' && req.method === 'GET') {
+        return sendJson(res, 200, await buffer.getOrganizations());
+      }
+      if (pathname === '/buffer/channels' && req.method === 'GET') {
+        return sendJson(res, 200, await buffer.listChannels(url.searchParams.get('organizationId')));
+      }
+      if (pathname === '/buffer/queue' && req.method === 'GET') {
+        return sendJson(res, 200, await buffer.listQueue({
+          organizationId: url.searchParams.get('organizationId'),
+          channelIds: (url.searchParams.get('channelIds') || '').split(',').filter(Boolean),
+          status: url.searchParams.get('status') || undefined,
+        }));
+      }
+      if (pathname === '/buffer/schedule' && req.method === 'POST') {
+        return sendJson(res, 200, await buffer.schedulePost(JSON.parse(await readBody(req) || '{}')));
       }
 
       if (pathname === '/decisions' && req.method === 'GET') {
