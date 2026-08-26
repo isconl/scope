@@ -16,6 +16,7 @@ const { createDecisionsClient } = require('../lib/decisions');
 const { createPlansClient } = require('../lib/plans');
 const { createPlanningInsightsClient } = require('../lib/planning-insights');
 const { createSurfacedTasksClient } = require('../lib/surfaced-tasks');
+const { createPortalPartiesClient } = require('../lib/portal-parties');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
 const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
@@ -115,6 +116,7 @@ async function main() {
   const plans = createPlansClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const planningInsights = createPlanningInsightsClient({ readTSV, appendTSV, auditLog });
   const surfacedTasks = createSurfacedTasksClient({ readTSV, appendTSV, rewriteTSV, auditLog });
+  const portalParties = createPortalPartiesClient({ readTSV, appendTSV, auditLog });
   const corporate = createCorporateClient({ readTSV, auditLog, getCareerContext });
   // BA26081803: resolve an engagement's real OneDrive folder for the
   // Writer push, via the same getCareerContext() every other cross-engine
@@ -253,6 +255,23 @@ async function main() {
       }
       if (pathname === '/surfaced-tasks/update' && req.method === 'POST') {
         return sendJson(res, 200, await surfacedTasks.updateSurfaced(JSON.parse(await readBody(req) || '{}')));
+      }
+
+      // BX26082424: portal-wide user_groups vs. per-listing deal_flow_parties.
+      if (pathname === '/portal/user-groups' && req.method === 'GET') {
+        return sendJson(res, 200, { userGroups: await portalParties.listUserGroups({ portal: url.searchParams.get('portal') }) });
+      }
+      if (pathname === '/portal/user-groups/add' && req.method === 'POST') {
+        return sendJson(res, 200, await portalParties.addUserGroup(JSON.parse(await readBody(req) || '{}')));
+      }
+      if (pathname === '/portal/user-groups/seed' && req.method === 'POST') {
+        return sendJson(res, 200, await portalParties.seedKnownUserGroups());
+      }
+      if (pathname === '/portal/deal-flow-parties' && req.method === 'GET') {
+        return sendJson(res, 200, { dealFlowParties: await portalParties.listDealFlowParties({ portal: url.searchParams.get('portal'), listingId: url.searchParams.get('listingId') }) });
+      }
+      if (pathname === '/portal/deal-flow-parties/add' && req.method === 'POST') {
+        return sendJson(res, 200, await portalParties.addDealFlowParty(JSON.parse(await readBody(req) || '{}')));
       }
 
       if (pathname === '/corporate' && req.method === 'GET') {
