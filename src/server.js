@@ -21,6 +21,7 @@ const { createBufferClient } = require('../lib/buffer');
 const { createActiveSubjectsClient } = require('../lib/active-subjects');
 const { createStatusBriefClient } = require('../lib/status-brief');
 const { computeAdherence } = require('../lib/time-optimization');
+const { computePersonaSplit } = require('../lib/identity-persona');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
 const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
@@ -383,6 +384,11 @@ async function main() {
       if (pathname === '/planning/adherence' && req.method === 'GET') {
         const days = parseInt(url.searchParams.get('days'), 10) || 7;
         return sendJson(res, 200, await computeAdherence({ readTSV, days }));
+      }
+
+      // BT26082415: identity-persona ring, read-only v1.
+      if (pathname === '/identity/persona-split' && req.method === 'GET') {
+        return sendJson(res, 200, await computePersonaSplit({ readTSV, day: url.searchParams.get('day') }));
       }
 
       if (pathname === '/corporate' && req.method === 'GET') {
