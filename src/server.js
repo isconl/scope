@@ -20,6 +20,7 @@ const { createPortalPartiesClient } = require('../lib/portal-parties');
 const { createBufferClient } = require('../lib/buffer');
 const { createActiveSubjectsClient } = require('../lib/active-subjects');
 const { createStatusBriefClient } = require('../lib/status-brief');
+const { computeAdherence } = require('../lib/time-optimization');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
 const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
@@ -374,6 +375,14 @@ async function main() {
       if (pathname === '/status-briefs/send' && req.method === 'POST') {
         const p = JSON.parse(await readBody(req) || '{}');
         return sendJson(res, 200, await statusBrief.sendBrief(p.briefId, { via: p.via, to: p.to }));
+      }
+
+      // BT26082414: block-adherence analysis, depends on BT26082413's real
+      // session data. Lands in the (already decluttered, BT26082417)
+      // Planning space as a new section.
+      if (pathname === '/planning/adherence' && req.method === 'GET') {
+        const days = parseInt(url.searchParams.get('days'), 10) || 7;
+        return sendJson(res, 200, await computeAdherence({ readTSV, days }));
       }
 
       if (pathname === '/corporate' && req.method === 'GET') {
