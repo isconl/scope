@@ -174,3 +174,74 @@ test('completeTask rejects an invalid target', async () => {
   const client = createTasksClient({ ...makeStore() });
   await assert.rejects(() => client.completeTask({ taskId: 'T1', target: 'archived' }));
 });
+
+test('startTaskSession opens a new {start,stop:null} session, stopTaskSession closes it', async () => {
+  const store = makeStore({ 'scope/tasks.tsv': [{ ID: 'T1', TITLE: 'x' }] });
+  const client = createTasksClient(store);
+  const started = await client.startTaskSession('T1');
+  assert.equal(started.sessions.length, 1);
+  assert.equal(started.sessions[0].stop, null);
+  const stopped = await client.stopTaskSession('T1');
+  assert.equal(stopped.sessions.length, 1);
+  assert.ok(stopped.sessions[0].stop);
+});
+
+test('startTaskSession refuses a second open session on the same task', async () => {
+  const store = makeStore({ 'scope/tasks.tsv': [{ ID: 'T1', TITLE: 'x' }] });
+  const client = createTasksClient(store);
+  await client.startTaskSession('T1');
+  await assert.rejects(() => client.startTaskSession('T1'), /already has an open session/);
+});
+
+test('stopTaskSession throws when no session is open', async () => {
+  const store = makeStore({ 'scope/tasks.tsv': [{ ID: 'T1', TITLE: 'x' }] });
+  const client = createTasksClient(store);
+  await assert.rejects(() => client.stopTaskSession('T1'), /no open session/);
+});
+
+test('startTaskSession/stopTaskSession/getTaskSessions all require a taskId and reject an unknown one', async () => {
+  const client = createTasksClient(makeStore());
+  await assert.rejects(() => client.startTaskSession(''), /taskId required/);
+  await assert.rejects(() => client.startTaskSession('nope'), /No task nope/);
+  await assert.rejects(() => client.stopTaskSession(''), /taskId required/);
+});
+
+test('a task supports multiple {start,stop} pairs for work spread across sittings', async () => {
+  const store = makeStore({ 'scope/tasks.tsv': [{ ID: 'T1', TITLE: 'x' }] });
+  const client = createTasksClient(store);
+  await client.startTaskSession('T1');
+  await client.stopTaskSession('T1');
+  await client.startTaskSession('T1');
+  const r = await client.stopTaskSession('T1');
+  assert.equal(r.sessions.length, 2);
+  assert.ok(r.sessions.every(s => s.stop));
+});
+
+test('getTaskSessions auto-closes a session left open past its own start day, flagged system:true', async () => {
+  const yesterday = new Date(Date.now() - 864e5).toISOString();
+  const store = makeStore({ 'scope/tasks.tsv': [{ ID: 'T1', TITLE: 'x', SESSIONS: JSON.stringify([{ start: yesterday, stop: null }]) }] });
+  const client = createTasksClient(store);
+  const sessions = await client.getTaskSessions('T1');
+  assert.equal(sessions.length, 1);
+  assert.ok(sessions[0].stop);
+  assert.equal(sessions[0].system, true);
+});
+
+test('startTaskSession sweeps a stale open session before opening the new one, rather than refusing', async () => {
+  const yesterday = new Date(Date.now() - 864e5).toISOString();
+  const store = makeStore({ 'scope/tasks.tsv': [{ ID: 'T1', TITLE: 'x', SESSIONS: JSON.stringify([{ start: yesterday, stop: null }]) }] });
+  const client = createTasksClient(store);
+  const r = await client.startTaskSession('T1');
+  assert.equal(r.sessions.length, 2);
+  assert.equal(r.sessions[0].system, true);
+  assert.equal(r.sessions[1].stop, null);
+});
+
+test('updateTask sets MODULE, blank clears it back to "-"', async () => {
+  const store = makeStore({ 'scope/tasks.tsv': [{ ID: 'T1', TITLE: 'x', STATUS: 'today', MODULE: '-' }] });
+  const client = createTasksClient(store);
+  await client.updateTask({ taskId: 'T1', module: 'viva-tasks/31' });
+  assert.equal(store.data['scope/tasks.tsv'][0].MODULE, 'viva-tasks/31');
+  await client.updateTask({ taskId: 'T1', module: '' });
+  assert.equal(store.data['scope/tasks.tsv'][0].MODULE, '-');
+});
