@@ -22,6 +22,7 @@ const { createActiveSubjectsClient } = require('../lib/active-subjects');
 const { createStatusBriefClient } = require('../lib/status-brief');
 const { computeAdherence } = require('../lib/time-optimization');
 const { computePersonaSplit } = require('../lib/identity-persona');
+const { createStyleCorpusClient } = require('../lib/style-corpus');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
 const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
@@ -124,6 +125,7 @@ async function main() {
   const planningInsights = createPlanningInsightsClient({ readTSV, appendTSV, auditLog });
   const surfacedTasks = createSurfacedTasksClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const portalParties = createPortalPartiesClient({ readTSV, appendTSV, auditLog });
+  const styleCorpus = createStyleCorpusClient({ readTSV, appendTSV, auditLog });
   const activeSubjects = createActiveSubjectsClient({ readTSV, appendTSV, rewriteTSV, auditLog, getCareerContext });
 
   // BA26082420: scope -> spark (draft the brief) and scope -> vault (send
@@ -389,6 +391,14 @@ async function main() {
       // BT26082415: identity-persona ring, read-only v1.
       if (pathname === '/identity/persona-split' && req.method === 'GET') {
         return sendJson(res, 200, await computePersonaSplit({ readTSV, day: url.searchParams.get('day') }));
+      }
+
+      // BM26082412 v1: style corpus + per-contact tailoring.
+      if (pathname === '/style-corpus/ingest' && req.method === 'POST') {
+        return sendJson(res, 200, await styleCorpus.ingestNew());
+      }
+      if (pathname === '/style-corpus/profile' && req.method === 'GET') {
+        return sendJson(res, 200, await styleCorpus.getStyleProfile(url.searchParams.get('personId')));
       }
 
       if (pathname === '/corporate' && req.method === 'GET') {
