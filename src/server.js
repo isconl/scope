@@ -23,6 +23,7 @@ const { createStatusBriefClient } = require('../lib/status-brief');
 const { computeAdherence } = require('../lib/time-optimization');
 const { computePersonaSplit } = require('../lib/identity-persona');
 const { createStyleCorpusClient } = require('../lib/style-corpus');
+const { createWriterBinderClient } = require('../lib/writer-binder');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
 const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
@@ -146,6 +147,18 @@ async function main() {
     return { ok: true };
   };
   const statusBrief = createStatusBriefClient({ readTSV, appendTSV, rewriteTSV, auditLog, callSpark, sendMail: sendMailCrossEngine });
+
+  // BA26082403: Writer binder-tree, scope -> vault's existing OneDrive-
+  // browse routes (same cross-engine pattern as sendMailCrossEngine above).
+  const vaultBrowseRequest = VAULT_URL ? defaultRequest(VAULT_URL, () => secretStore.get('VAULT_TOKEN')) : null;
+  const callVault = async (method, path, query) => {
+    if (!vaultBrowseRequest) return { ok: false, error: 'VAULT_URL not configured' };
+    const qs = query ? `?${new URLSearchParams(query).toString()}` : '';
+    const r = await vaultBrowseRequest(method, `${path}${qs}`);
+    if (r.status !== 200) return { ok: false, error: (r.data && r.data.error) || `vault returned ${r.status}` };
+    return { ok: true, data: r.data };
+  };
+  const writerBinder = createWriterBinderClient({ callVault, auditLog });
 
   // Friday auto-draft. NOT built on CronCreate (a Claude Code session
   // scheduling tool -- session-only, dies when the session ends, auto-
@@ -399,6 +412,14 @@ async function main() {
       }
       if (pathname === '/style-corpus/profile' && req.method === 'GET') {
         return sendJson(res, 200, await styleCorpus.getStyleProfile(url.searchParams.get('personId')));
+      }
+
+      // BA26082403: Writer binder-tree first slice.
+      if (pathname === '/writer/binder/episodes' && req.method === 'GET') {
+        return sendJson(res, 200, await writerBinder.listEpisodes());
+      }
+      if (pathname === '/writer/binder/compile' && req.method === 'GET') {
+        return sendJson(res, 200, await writerBinder.compileEpisode(url.searchParams.get('itemId')));
       }
 
       if (pathname === '/corporate' && req.method === 'GET') {
