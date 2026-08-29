@@ -27,6 +27,7 @@ const { createWriterBinderClient } = require('../lib/writer-binder');
 const { createCorporateClient } = require('../lib/corporate');
 const { createGenerateClient } = require('../lib/generate/generate-client');
 const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
+const { createPendingJiraWritesClient } = require('../lib/pending-jira-writes');
 const manifest = require('../lib/manifest');
 const httpLib = require('http');
 const httpsLib = require('https');
@@ -95,6 +96,14 @@ async function main() {
   });
 
   const jiraGate = createJiraGateClient({ readTSV, rewriteTSV, auditLog, jira, getConfig: getJiraConfig });
+
+  // BX26082801: out-of-band write-approval gate. jira is passed in so
+  // approve() can fire the real call, but the client works safely (enqueue/list/deny)
+  // even when Jira is not configured.
+  const pendingJiraWrites = createPendingJiraWritesClient({
+    readTSV, appendTSV, rewriteTSV, auditLog,
+    jira: jiraConfigured() ? jira : null,
+  });
 
   // Cross-engine: career context (org facts, decisions, risks, people,
   // doctrine) lives in circle (lib/career.js), served over HTTP at
@@ -286,6 +295,30 @@ async function main() {
         return sendJson(res, r.blocked ? 409 : (r.success ? 200 : 502), r);
       }
 
+      // BX26082801: out-of-band write-approval queue.
+      // GET  /jira/pending         -- list queued writes (optionally ?status=pending|approved|denied|error)
+      // POST /jira/pending/enqueue -- enqueue an autonomous write for approval
+      // POST /jira/pending/approve -- Architect approves, fires the real Jira call
+      // POST /jira/pending/deny    -- Architect denies, discards the queued write
+      if (pathname === '/jira/pending' && req.method === 'GET') {
+        return sendJson(res, 200, { pending: await pendingJiraWrites.listPending({ status: url.searchParams.get('status') || undefined }) });
+      }
+      if (pathname === '/jira/pending/enqueue' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        try { return sendJson(res, 200, await pendingJiraWrites.enqueue(p)); }
+        catch (e) { return sendJson(res, 400, { success: false, error: e.message }); }
+      }
+      if (pathname === '/jira/pending/approve' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        try { return sendJson(res, 200, await pendingJiraWrites.approve(p)); }
+        catch (e) { return sendJson(res, 400, { success: false, error: e.message }); }
+      }
+      if (pathname === '/jira/pending/deny' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        try { return sendJson(res, 200, await pendingJiraWrites.deny(p)); }
+        catch (e) { return sendJson(res, 400, { success: false, error: e.message }); }
+      }
+
       // BX26082422 read side -- issue/comments/projects, safe (no
       // gating needed, this is read-only). Write-side gating design is
       // NOT built here -- see plan.md, needs Architect's sign-off first.
@@ -409,6 +442,10 @@ async function main() {
       // BM26082412 v1: style corpus + per-contact tailoring.
       if (pathname === '/style-corpus/ingest' && req.method === 'POST') {
         return sendJson(res, 200, await styleCorpus.ingestNew());
+      }
+      if (pathname === '/style-corpus/ingest-turns' && req.method === 'POST') {
+        const body = JSON.parse(await readBody(req) || '{}');
+        return sendJson(res, 200, await styleCorpus.ingestTurns(body.turns || []));
       }
       if (pathname === '/style-corpus/profile' && req.method === 'GET') {
         return sendJson(res, 200, await styleCorpus.getStyleProfile(url.searchParams.get('personId')));
