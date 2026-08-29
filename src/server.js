@@ -319,6 +319,34 @@ async function main() {
         catch (e) { return sendJson(res, 400, { success: false, error: e.message }); }
       }
 
+      if (pathname === '/jira/issues' && req.method === 'GET') {
+        return sendJson(res, 200, { issues: await jira.jiraListMyIssues() });
+      }
+      if (pathname === '/jira/transition' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        const r = await jira.jiraTransitionIssue(p.issueKey, p.transition);
+        return sendJson(res, r.success ? 200 : 400, r);
+      }
+      if (pathname === '/jira/assignable' && req.method === 'GET') {
+        const force = url.searchParams.get('refresh') === '1';
+        return sendJson(res, 200, { users: await jira.jiraAssignableUsers({ force }) });
+      }
+      if (pathname === '/jira/assign' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        const r = await jira.jiraAssignIssue(p.issueKey, p.accountId);
+        return sendJson(res, r.success ? 200 : 400, r);
+      }
+      if (pathname === '/jira/delete' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        const r = await jira.jiraDeleteIssue(p.issueKey);
+        return sendJson(res, r.success ? 200 : 400, r);
+      }
+      if (pathname === '/jira/clear' && req.method === 'POST') {
+        const p = JSON.parse(await readBody(req) || '{}');
+        const r = await jira.jiraTransitionIssue(p.issueKey, 'Done');
+        return sendJson(res, r.success ? 200 : 400, { cleared: !!r.success, ...r });
+      }
+
       // BX26082422 read side -- issue/comments/projects, safe (no
       // gating needed, this is read-only). Write-side gating design is
       // NOT built here -- see plan.md, needs Architect's sign-off first.
