@@ -94,3 +94,22 @@ test('getStyleProfile returns general-only with a clear note for a contact with 
   assert.equal(r.perContact, null);
   assert.match(r.note, /no outbound history/);
 });
+
+test('ingestTurns ingests user turns from a session and is idempotent by ID/UUID', async () => {
+  const store = makeStore();
+  const client = createStyleCorpusClient(store);
+  const turns = [
+    { id: 'turn-1', text: 'Let us build the teams OS feature.', capturedAt: '2026-08-28' },
+    { uuid: 'turn-2', content: 'Also verify all endpoints on localhost.', timestamp: '2026-08-28T21:00:00Z' },
+    { id: 'turn-3', text: '-' }
+  ];
+  const r1 = await client.ingestTurns(turns);
+  assert.equal(r1.ingested, 2);
+  assert.equal(store.data['scope/style_corpus.tsv'].length, 2);
+
+  // Idempotent re-run
+  const r2 = await client.ingestTurns(turns);
+  assert.equal(r2.ingested, 0);
+  assert.equal(store.data['scope/style_corpus.tsv'].length, 2);
+});
+
