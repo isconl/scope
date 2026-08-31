@@ -172,8 +172,8 @@ async function main() {
   // Friday auto-draft. NOT built on CronCreate (a Claude Code session
   // scheduling tool -- session-only, dies when the session ends, auto-
   // expires after 7 days -- wrong mechanism entirely for a durable weekly
-  // job). Same in-process setInterval pattern vault/lib/sync-loop.js
-  // already uses for its own periodic work: checks once a day whether
+  // job). Same in-process setInterval pattern vault/lib/backup-loop.js
+  // uses for its own periodic work: checks once a day whether
   // today is Friday and this week's batch hasn't run yet, tracked by a
   // plain in-memory "last run" week-stamp (resets on restart, which is
   // fine -- a missed Friday during a restart window just drafts on the
