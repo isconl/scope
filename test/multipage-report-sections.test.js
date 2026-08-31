@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const { build } = require('../lib/generate/doc-builder');
 const { renderDocx } = require('../lib/generate/render-docx');
 const { renderMarkdown } = require('../lib/generate/render-markdown');
+const JSZip = require('jszip');
 
 const BASE = { title: 'Competitive Position Review', date_readable: '26 August 2026', executive_summary: 'Summary text.', conclusion: 'Closing text.' };
 
@@ -54,4 +55,21 @@ test("Riley' document shape: mixed paragraph/table/bullets sections all build, r
   assert.ok(md.includes('Pricing opacity'));
   const docxBuf = await renderDocx(tree);
   assert.ok(Buffer.isBuffer(docxBuf) && docxBuf.length > 1000);
+});
+
+// FN26082604: a "**bold** lead-in, then plain explanation" bullet must
+// render as a real bold run in the .docx, not literal asterisks.
+test('a bullet item with a **bold** lead-in renders as separate bold/plain runs in the docx', async () => {
+  const { tree } = build('_common', 'multipage-report', {
+    ...BASE,
+    report_sections: [
+      { heading: 'Where We Are Winning', type: 'bullets', body: ['**Speed:** we ship faster than any competitor.'] },
+    ],
+  });
+  const docxBuf = await renderDocx(tree);
+  const zip = await JSZip.loadAsync(docxBuf);
+  const documentXml = await zip.file('word/document.xml').async('string');
+  assert.ok(!documentXml.includes('**Speed:**'), 'literal asterisks must not survive into the docx XML');
+  assert.match(documentXml, /<w:b\/>[\s\S]*?Speed:/, 'expected a bold run wrapping the "Speed:" lead-in');
+  assert.ok(documentXml.includes('we ship faster than any competitor.'), 'plain explanation text must still be present');
 });
