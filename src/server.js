@@ -211,7 +211,15 @@ async function main() {
     const folder = venture && venture.FOLDER;
     return (folder && folder !== '-') ? folder : null;
   };
-  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV, uploadFile: store.uploadFile, resolveEngagementFolder, resolveProjectFolder });
+  // BA26083107: list the live OneDrive contents of a folder via vault's
+  // existing /onedrive/browse route -- same cross-engine call pattern as
+  // callVault above, reused (not a second HTTP client) for docsRegistry's
+  // listDocsMerged().
+  const browseOnedriveFolder = async (path) => {
+    const r = await callVault('GET', '/onedrive/browse', { path });
+    return r.ok ? r.data : { ok: false, error: r.error };
+  };
+  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV, uploadFile: store.uploadFile, resolveEngagementFolder, resolveProjectFolder, browseFolder: browseOnedriveFolder });
   // BA26081811: local disk root for generated documents -- independent of
   // the OneDrive root question BA26081803/BA26081813 are still blocked on
   // (corporate-engagement org-slug, project/general root); this is purely
@@ -506,13 +514,37 @@ async function main() {
         return sendJson(res, 200, await generate.generate(JSON.parse(await readBody(req) || '{}')));
       }
 
-      // BA26081811: the generated-documents registry.
+      // BA26081811: the generated-documents registry. BA26083107: also
+      // merges in a live OneDrive folder listing for the active
+      // engagement, so every real document (not just Writer-generated
+      // ones) surfaces here -- an explicit targetKind/targetId query
+      // still works and is respected as-is; with neither given, this
+      // defaults to merging the currently active engagement (career/
+      // _active.yaml), since that's what "every document ever drafted
+      // for Viva" (or whichever org is active) actually means day to day.
       if (pathname === '/generate/docs' && req.method === 'GET') {
-        const docs = await docsRegistry.listDocs({
+        const filter = {
           archetypeId: url.searchParams.get('archetypeId') || undefined,
           targetKind: url.searchParams.get('targetKind') || undefined,
           status: url.searchParams.get('status') || undefined,
-        });
+        };
+        // The engagement to merge a live OneDrive listing for -- an
+        // explicit ?targetId= (with targetKind=engagement) wins; otherwise
+        // default to the currently active engagement (career/_active.yaml),
+        // since "surface every document" means the one Sconl is actually
+        // looking at day to day, not every engagement ever on file.
+        let mergeEngagement = null;
+        const explicitTargetId = url.searchParams.get('targetId');
+        if (filter.targetKind === 'engagement' && explicitTargetId) {
+          mergeEngagement = { id: explicitTargetId };
+        } else if (!filter.targetKind || filter.targetKind === 'engagement') {
+          const ctx = await getCareerContext().catch(() => ({}));
+          if (ctx.activeOrg) {
+            const org = (ctx.orgs || []).find(o => o.id === ctx.activeOrg);
+            mergeEngagement = { id: ctx.activeOrg, label: org && org.name };
+          }
+        }
+        const docs = await docsRegistry.listDocsMerged(filter, mergeEngagement);
         return sendJson(res, 200, { docs });
       }
       if (pathname === '/generate/docs/update' && req.method === 'POST') {

@@ -151,6 +151,58 @@ test('listDocs excludes deleted rows by default, and filters by archetype/target
   assert.deepEqual(byArchetype.map(r => r.ID), ['GD0001', 'GD0003']);
 });
 
+test('listDocsMerged (BA26083107): merges a live OneDrive listing for the given engagement, tagged and deduped against generated rows', async () => {
+  const store = makeStore({ 'scope/generated_docs.tsv': [
+    { ID: 'GD0001', ARCHETYPE_ID: 'a', TARGET_KIND: 'engagement', TARGET_ID: 'viva-valentia', FILENAME: 'already-generated.docx', STATUS: 'active', CREATED_AT: '2026-08-19' },
+  ] });
+  const browseFolder = async (folderPath) => {
+    assert.equal(folderPath, 'Sconl/Core/Axial/Visionary/Corporate/2026-viva-valentia/work-documents');
+    return { ok: true, items: [
+      { id: 'i1', name: 'already-generated.docx', webUrl: 'https://onedrive.example/dup' }, // should be deduped out
+      { id: 'i2', name: 'competitor-position-review.pdf', webUrl: 'https://onedrive.example/pdf', downloadUrl: 'https://onedrive.example/pdf/dl', lastModifiedDateTime: '2026-08-23T10:00:00Z' },
+      { id: 'i3', name: 'subfolder', folder: { childCount: 2 } }, // should be excluded, not a file
+    ] };
+  };
+  const resolveEngagementFolder = async (id) => (id === 'viva-valentia' ? '2026-viva-valentia' : id);
+  const client = createDocsRegistryClient({ ...store, browseFolder, resolveEngagementFolder });
+  const merged = await client.listDocsMerged({}, { id: 'viva-valentia', label: 'Viva Valentia' });
+  assert.equal(merged.length, 2);
+  assert.deepEqual(merged.map(r => r.FILENAME).sort(), ['already-generated.docx', 'competitor-position-review.pdf']);
+  const onedriveEntry = merged.find(r => r.FILENAME === 'competitor-position-review.pdf');
+  assert.equal(onedriveEntry.SOURCE, 'onedrive');
+  assert.equal(onedriveEntry.ONEDRIVE_WEBURL, 'https://onedrive.example/pdf');
+  assert.equal(onedriveEntry.ONEDRIVE_DOWNLOAD_URL, 'https://onedrive.example/pdf/dl');
+  assert.equal(onedriveEntry.TARGET_LABEL, 'Viva Valentia');
+  assert.equal(onedriveEntry.LOCAL_PATH, '-');   // nothing to re-open in the Edit studio
+  const generatedEntry = merged.find(r => r.FILENAME === 'already-generated.docx');
+  assert.equal(generatedEntry.SOURCE, 'generated');
+});
+
+test('listDocsMerged falls back to generated-only when browseFolder fails, and skips the merge with no mergeEngagement', async () => {
+  const store = makeStore({ 'scope/generated_docs.tsv': [
+    { ID: 'GD0001', ARCHETYPE_ID: 'a', TARGET_KIND: 'engagement', TARGET_ID: 'viva-valentia', FILENAME: 'doc.docx', STATUS: 'active', CREATED_AT: '2026-08-19' },
+  ] });
+  const failingBrowse = async () => ({ ok: false, error: 'vault unreachable' });
+  const client = createDocsRegistryClient({ ...store, browseFolder: failingBrowse });
+  const withFailure = await client.listDocsMerged({}, { id: 'viva-valentia' });
+  assert.equal(withFailure.length, 1);
+  assert.equal(withFailure[0].SOURCE, 'generated');
+  const withoutMerge = await client.listDocsMerged({}, null);
+  assert.equal(withoutMerge.length, 1);
+});
+
+test('listDocsMerged does not merge OneDrive when the filter explicitly scopes to a non-engagement targetKind', async () => {
+  const store = makeStore({ 'scope/generated_docs.tsv': [
+    { ID: 'GD0001', TARGET_KIND: 'general', FILENAME: 'general-doc.docx', STATUS: 'active', CREATED_AT: '2026-08-19' },
+  ] });
+  let browseCalled = false;
+  const browseFolder = async () => { browseCalled = true; return { ok: true, items: [] }; };
+  const client = createDocsRegistryClient({ ...store, browseFolder });
+  const result = await client.listDocsMerged({ targetKind: 'general' }, { id: 'viva-valentia' });
+  assert.equal(browseCalled, false);
+  assert.equal(result.length, 1);
+});
+
 test('updateDoc(status: deleted) soft-deletes the row AND unlinks the local files', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-test-'));
   const localPath = path.join(dir, 'doc.docx');
