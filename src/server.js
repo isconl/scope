@@ -53,8 +53,15 @@ function sendJson(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
+let _devAuthBypassLog = null; // set once main() creates auditLog; used by ISCONL_DEV_NO_AUTH (BS26090501)
+
 function checkAuth(req) {
-  const token = secretStore.get('SCOPE_TOKEN', process.env.ISCONL_TOKEN || '');
+  // BS26090501: dev-only, loopback-gated (enforced at boot below), env-only -- never request-derived.
+  if (process.env.ISCONL_DEV_NO_AUTH === '1') {
+    if (_devAuthBypassLog) _devAuthBypassLog.log('dev_auth_bypass', { engine: 'scope', path: req.url });
+    return true;
+  }
+  const token = process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN || secretStore.get('SCOPE_TOKEN') || secretStore.get('ISCONL_TOKEN') || '';
   if (!token) return false;
   const auth = req.headers.authorization || '';
   const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
@@ -66,6 +73,7 @@ async function main() {
   console.log(`  secrets: ${secretsResult.source}, ${secretsResult.count} key(s)`);
 
   const auditLog = createAuditLog({ logsDir: LOGS_DIR });
+  _devAuthBypassLog = auditLog;
   if (!VAULT_URL) {
     console.error('  REFUSING TO START: VAULT_URL is not configured -- scope has no data store without it.');
     process.exit(1);
@@ -211,7 +219,15 @@ async function main() {
     const folder = venture && venture.FOLDER;
     return (folder && folder !== '-') ? folder : null;
   };
-  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV, uploadFile: store.uploadFile, resolveEngagementFolder, resolveProjectFolder });
+  // BA26083107: list the live OneDrive contents of a folder via vault's
+  // existing /onedrive/browse route -- same cross-engine call pattern as
+  // callVault above, reused (not a second HTTP client) for docsRegistry's
+  // listDocsMerged().
+  const browseOnedriveFolder = async (path) => {
+    const r = await callVault('GET', '/onedrive/browse', { path });
+    return r.ok ? r.data : { ok: false, error: r.error };
+  };
+  const docsRegistry = createDocsRegistryClient({ readTSV, appendTSV, rewriteTSV, uploadFile: store.uploadFile, resolveEngagementFolder, resolveProjectFolder, browseFolder: browseOnedriveFolder });
   // BA26081811: local disk root for generated documents -- independent of
   // the OneDrive root question BA26081803/BA26081813 are still blocked on
   // (corporate-engagement org-slug, project/general root); this is purely
@@ -221,8 +237,12 @@ async function main() {
   const GENERATED_DOCS_ROOT = process.env.GENERATED_DOCS_ROOT || path.join(__dirname, '..', 'generated');
   const generate = createGenerateClient({ auditLog, docsRegistry, outputRoot: GENERATED_DOCS_ROOT });
 
-  const tokenConfigured = !!secretStore.get('SCOPE_TOKEN', process.env.ISCONL_TOKEN || '');
+  const tokenConfigured = !!(process.env.SCOPE_TOKEN || process.env.ISCONL_TOKEN || secretStore.get('SCOPE_TOKEN') || secretStore.get('ISCONL_TOKEN'));
   const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(BIND);
+  if (process.env.ISCONL_DEV_NO_AUTH === '1' && !isLoopback) {
+    console.error('  REFUSING TO BIND: ISCONL_DEV_NO_AUTH is set but BIND is not loopback -- dev auth bypass is loopback-only.');
+    process.exit(1);
+  }
   if (!isLoopback && !tokenConfigured) {
     console.error('  REFUSING TO BIND: no SCOPE_TOKEN/ISCONL_TOKEN configured and BIND is not loopback.');
     process.exit(1);
@@ -506,13 +526,37 @@ async function main() {
         return sendJson(res, 200, await generate.generate(JSON.parse(await readBody(req) || '{}')));
       }
 
-      // BA26081811: the generated-documents registry.
+      // BA26081811: the generated-documents registry. BA26083107: also
+      // merges in a live OneDrive folder listing for the active
+      // engagement, so every real document (not just Writer-generated
+      // ones) surfaces here -- an explicit targetKind/targetId query
+      // still works and is respected as-is; with neither given, this
+      // defaults to merging the currently active engagement (career/
+      // _active.yaml), since that's what "every document ever drafted
+      // for TenantOne" (or whichever org is active) actually means day to day.
       if (pathname === '/generate/docs' && req.method === 'GET') {
-        const docs = await docsRegistry.listDocs({
+        const filter = {
           archetypeId: url.searchParams.get('archetypeId') || undefined,
           targetKind: url.searchParams.get('targetKind') || undefined,
           status: url.searchParams.get('status') || undefined,
-        });
+        };
+        // The engagement to merge a live OneDrive listing for -- an
+        // explicit ?targetId= (with targetKind=engagement) wins; otherwise
+        // default to the currently active engagement (career/_active.yaml),
+        // since "surface every document" means the one Sconl is actually
+        // looking at day to day, not every engagement ever on file.
+        let mergeEngagement = null;
+        const explicitTargetId = url.searchParams.get('targetId');
+        if (filter.targetKind === 'engagement' && explicitTargetId) {
+          mergeEngagement = { id: explicitTargetId };
+        } else if (!filter.targetKind || filter.targetKind === 'engagement') {
+          const ctx = await getCareerContext().catch(() => ({}));
+          if (ctx.activeOrg) {
+            const org = (ctx.orgs || []).find(o => o.id === ctx.activeOrg);
+            mergeEngagement = { id: ctx.activeOrg, label: org && org.name };
+          }
+        }
+        const docs = await docsRegistry.listDocsMerged(filter, mergeEngagement);
         return sendJson(res, 200, { docs });
       }
       if (pathname === '/generate/docs/update' && req.method === 'POST') {
