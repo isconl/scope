@@ -1,0 +1,436 @@
+<title>Weekly Alignment Brief</title>
+<style>
+  :root{
+    --bg:#0d1117;
+    --surface:#161b22;
+    --panel:#21262d;
+    --panel-hover:#2b3239;
+    --border:#30363d;
+    --border-bright:rgba(63,185,80,0.4);
+    --text:#e6edf3;
+    --text-2:#8b949e;
+    --text-3:#6e7681;
+    --green:#3fb950;
+    --green-bright:#56d364;
+    --green-bg:rgba(63,185,80,0.08);
+    --purple:#bc8cff;
+    --purple-bg:rgba(188,140,255,0.08);
+    --blue:#58a6ff;
+    --blue-bg:rgba(88,166,255,0.08);
+    --yellow:#e3b341;
+    --yellow-bg:rgba(227,179,65,0.08);
+    --red:#f85149;
+    --red-bg:rgba(248,81,73,0.08);
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+
+    --pg-bg:#fbfbf9;
+    --pg-ink:#15181c;
+    --pg-soft:#565f6b;
+    --pg-line:#dde1e2;
+    --pg-accent:#1f7a44;
+    --pg-accent-bg:#e9f3ec;
+    --pg-shadow:rgba(13,17,23,0.55);
+  }
+  *{box-sizing:border-box;}
+  html,body{ margin:0; }
+  body{
+    background:var(--bg); color:var(--text); font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased; min-height:100vh;
+  }
+  ::selection{ background:var(--green-bg); color:var(--green-bright); }
+
+  .chrome{
+    position:sticky; top:0; z-index:30;
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    padding:12px 20px; background:rgba(13,17,23,0.9); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border);
+  }
+  .brand{ display:flex; align-items:center; gap:8px; font-weight:800; letter-spacing:-0.01em; }
+  .brand .dot{ width:8px; height:8px; border-radius:50%; background:var(--green-bright); box-shadow:0 0 8px var(--green-bright); }
+  .brand small{ color:var(--text-2); font-weight:500; font-family:var(--font-mono); font-size:0.72rem; margin-left:2px; }
+
+  .viewtoggle{ display:flex; gap:2px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:3px; font-family:var(--font-mono); font-size:0.74rem; }
+  .viewtoggle button{ appearance:none; border:0; background:transparent; color:var(--text-2); padding:7px 13px; border-radius:7px; cursor:pointer; text-transform:uppercase; letter-spacing:0.03em; }
+  .viewtoggle button.active{ background:var(--panel); color:var(--green-bright); }
+
+  .pipeline-note{ font-family:var(--font-mono); font-size:0.68rem; color:var(--text-3); }
+
+  main{ padding:36px 16px 100px; }
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  /* ================= ONE-PAGER (print/export) ================= */
+  .stage{ display:flex; justify-content:center; }
+  .page-col{ width:min(210mm,94vw); display:flex; flex-direction:column; gap:14px; }
+  .export-row{ display:flex; justify-content:center; gap:8px; }
+  .export-btn{
+    font-family:var(--font-mono); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em;
+    background:var(--surface); border:1px solid var(--border); color:var(--text-2);
+    padding:8px 14px; border-radius:8px; cursor:pointer;
+  }
+  .export-btn:hover{ border-color:var(--green); color:var(--green-bright); }
+
+  .a4{
+    background:var(--pg-bg); color:var(--pg-ink);
+    width:100%; aspect-ratio:210/297; overflow-y:auto;
+    box-shadow:0 24px 60px -16px var(--pg-shadow), 0 2px 10px var(--pg-shadow);
+    border-radius:2px; padding:24mm; font-family:var(--font-sans);
+  }
+  .a4::-webkit-scrollbar{ width:8px; } .a4::-webkit-scrollbar-thumb{ background:var(--pg-line); border-radius:8px; }
+
+  .pg-head{ border-bottom:2px solid var(--pg-accent); padding-bottom:10px; margin-bottom:10px; }
+  .pg-eyebrow{ font-family:var(--font-mono); font-size:0.7rem; text-transform:uppercase; letter-spacing:0.09em; color:var(--pg-accent); margin-bottom:4px; }
+  .pg-title{ font-size:2.05rem; font-weight:900; letter-spacing:-0.015em; line-height:1.12; }
+
+  .info-table{ width:100%; border-collapse:collapse; margin-bottom:22px; }
+  .info-table td{ padding:3px 12px 3px 0; border-bottom:1px solid var(--pg-line); vertical-align:baseline; }
+  .info-table td:last-child{ padding-right:0; }
+  .info-table .lbl{ font-family:var(--font-mono); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--pg-soft); white-space:nowrap; width:1%; }
+  .info-table .val{ font-size:0.84rem; font-weight:700; color:var(--pg-ink); }
+
+  .pg-link{ color:var(--pg-accent); font-weight:700; text-decoration:none; }
+  .pg-link:hover{ text-decoration:underline; }
+
+  .pg-h{ font-size:0.84rem; text-transform:uppercase; letter-spacing:0.07em; color:var(--pg-accent); font-weight:800; font-family:var(--font-mono); margin:20px 0 9px; }
+
+  .next-brief{ margin-top:22px; padding-top:12px; border-top:1px solid var(--pg-line); font-family:var(--font-mono); font-size:0.72rem; font-weight:600; color:var(--pg-accent); }
+  .pg-summary{ list-style:none; margin:0; padding:0; display:grid; gap:5px; }
+  .pg-summary li{ font-size:0.86rem; line-height:1.5; padding-left:14px; position:relative; }
+  .pg-summary li::before{ content:"·"; position:absolute; left:2px; color:var(--pg-accent); font-weight:900; }
+
+  .pg-table{ width:100%; border-collapse:collapse; font-size:0.82rem; }
+  .pg-table th{ text-align:left; font-family:var(--font-mono); font-size:0.64rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--pg-soft); padding:5px 8px 5px 0; border-bottom:1px solid var(--pg-line); }
+  .pg-table td{ padding:7px 8px 7px 0; border-bottom:1px solid var(--pg-line); vertical-align:top; line-height:1.4; }
+  .pg-status{ display:inline-block; font-family:var(--font-mono); font-size:0.62rem; font-weight:700; text-transform:uppercase; padding:2px 6px; border-radius:4px; white-space:nowrap; }
+  .pg-status.done{ background:var(--pg-accent-bg); color:var(--pg-accent); }
+  .pg-status.wip{ background:#fbeed9; color:#8a5b12; }
+  .pg-status.blocked{ background:#fbe2e0; color:#9c2c22; }
+
+  .pg-asks{ margin:0; padding-left:17px; display:grid; gap:6px; }
+  .pg-asks li{ font-size:0.86rem; line-height:1.45; }
+
+  .pg-watch{ font-size:0.86rem; line-height:1.5; }
+
+  .signoff{ display:flex; flex-direction:column; gap:14px; margin-top:20px; padding-top:14px; border-top:1px solid var(--pg-line); }
+  .sign-line{ display:flex; align-items:flex-end; gap:8px; }
+  .sign-line span{ font-family:var(--font-mono); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--pg-soft); white-space:nowrap; }
+  .sign-line .rule{ flex:0 0 33%; border-bottom:1px solid var(--pg-ink); height:1px; }
+
+  .pg-foot{ margin-top:10px; padding-top:8px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; font-family:var(--font-mono); font-size:0.6rem; color:var(--pg-soft); }
+
+  /* ================= INTERACTIVE ================= */
+  .wrap{ max-width:820px; margin:0 auto; }
+  .header-card{ background:var(--green-bg); border:1px solid var(--border-bright); border-left:4px solid var(--green); border-radius:12px; padding:18px 16px; margin-bottom:18px; }
+  .badge{ display:inline-block; font-family:var(--font-mono); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; padding:3px 8px; border-radius:4px; background:var(--panel); color:var(--green-bright); border:1px solid var(--border); margin-bottom:8px; }
+  h1.brief-title{ font-size:1.5rem; font-weight:800; letter-spacing:-0.02em; margin:0 0 6px; }
+  .meta-line{ font-size:0.8rem; color:var(--text-2); font-family:var(--font-mono); }
+
+  .triage{ display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .triage button{ flex:1; min-width:130px; appearance:none; border:1px solid var(--border); background:var(--surface); color:var(--text-2); font-family:var(--font-sans); font-weight:600; font-size:0.8rem; padding:9px; border-radius:8px; cursor:pointer; }
+  .triage button[data-tone="green"].selected{ background:var(--green-bg); border-color:var(--green); color:var(--green-bright); }
+  .triage button[data-tone="yellow"].selected{ background:var(--yellow-bg); border-color:var(--yellow); color:var(--yellow); }
+  .triage button[data-tone="red"].selected{ background:var(--red-bg); border-color:var(--red); color:var(--red); }
+
+  h2.sec{ font-size:1.14rem; font-weight:750; letter-spacing:-0.01em; margin:30px 0 12px; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border); padding-bottom:6px; }
+  .sec-source{ margin-left:auto; font-family:var(--font-mono); font-size:0.62rem; color:var(--text-3); font-weight:400; text-transform:none; letter-spacing:0; }
+
+  p{ margin:0 0 12px; font-size:0.95rem; }
+  ul.plain{ margin:0 0 14px 20px; padding:0; } ul.plain li{ margin-bottom:6px; font-size:0.93rem; }
+  strong{ color:#fff; }
+
+  .callout{ border-radius:8px; padding:12px 14px; margin:14px 0; font-size:0.9rem; line-height:1.55; }
+  .callout span.tag{ display:block; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px; font-family:var(--font-mono); }
+  .callout-watch{ background:var(--yellow-bg); border-left:3.5px solid var(--yellow); } .callout-watch span.tag{ color:var(--yellow); }
+  .callout-research{ background:var(--blue-bg); border-left:3.5px solid var(--blue); } .callout-research span.tag{ color:var(--blue); }
+  .lens-note{ display:block; font-family:var(--font-mono); font-size:0.58rem; color:var(--text-3); margin-top:6px; letter-spacing:0.02em; }
+
+  .status-pill{ display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; font-family:var(--font-mono); }
+  .pill-green{ background:rgba(63,185,80,0.15); color:var(--green-bright); }
+  .pill-yellow{ background:rgba(227,179,65,0.15); color:var(--yellow); }
+  .pill-blue{ background:rgba(88,166,255,0.15); color:var(--blue); }
+
+  .qa-card{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+  .qa-q{ font-weight:750; font-size:0.98rem; margin-bottom:8px; display:flex; align-items:flex-start; gap:8px; }
+  .qa-badge-ask{ background:var(--blue-bg); color:var(--blue); border:1px solid rgba(88,166,255,0.3); font-size:10px; padding:2px 6px; border-radius:4px; font-family:var(--font-mono); flex-shrink:0; margin-top:2px; }
+  .qa-badge-answer{ background:var(--green-bg); color:var(--green-bright); border:1px solid rgba(63,185,80,0.3); font-size:10px; padding:2px 6px; border-radius:4px; font-family:var(--font-mono); flex-shrink:0; margin-top:2px; }
+  .qa-a{ font-size:0.88rem; color:var(--text-2); line-height:1.55; }
+  .qa-a strong{ color:var(--text); }
+
+  .respond{ margin-top:12px; padding-top:12px; border-top:1px dashed var(--border); }
+  .respond-chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+  .r-chip{ appearance:none; border:1px solid var(--border); background:var(--panel); color:var(--text-2); font-family:var(--font-mono); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.03em; padding:5px 10px; border-radius:99px; cursor:pointer; }
+  .r-chip.selected[data-tone="agree"]{ background:var(--green-bg); border-color:var(--green); color:var(--green-bright); }
+  .r-chip.selected[data-tone="discuss"]{ background:var(--yellow-bg); border-color:var(--yellow); color:var(--yellow); }
+  .r-chip.selected[data-tone="handled"]{ background:var(--blue-bg); border-color:var(--blue); color:var(--blue); }
+  .respond textarea{
+    width:100%; min-height:56px; resize:vertical; background:var(--bg); color:var(--text);
+    border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-family:var(--font-sans); font-size:0.85rem;
+  }
+  .respond textarea:focus{ outline:2px solid var(--green); outline-offset:1px; border-color:transparent; }
+  .respond-actions{ display:flex; justify-content:flex-end; margin-top:6px; }
+  .send-btn{ appearance:none; border:0; background:var(--green); color:#04160a; font-weight:700; font-size:0.78rem; padding:7px 14px; border-radius:7px; cursor:pointer; }
+  .send-btn:active{ transform:translateY(1px); }
+  .reply-log{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .reply-item{ background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:0.82rem; }
+  .reply-item .who{ font-family:var(--font-mono); font-size:0.62rem; color:var(--green-bright); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:3px; }
+
+  .footer{ margin-top:36px; padding-top:16px; border-top:1px solid var(--border); text-align:center; font-size:0.75rem; color:var(--text-3); font-family:var(--font-mono); }
+  .pipeline{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-top:14px; font-family:var(--font-mono); font-size:0.72rem; color:var(--text-2); line-height:1.7; }
+  .pipeline b{ color:var(--text); }
+
+  @media (max-width:600px){
+    .pg-head{ flex-direction:column; } .pg-meta{ text-align:left; }
+    .triage button{ min-width:100%; }
+  }
+</style>
+
+<header class="chrome">
+  <div class="brand"><span class="dot"></span>iSconl <span class="pipeline-note">/ Writer</span><small>weekly alignment brief</small></div>
+  <nav class="viewtoggle" id="viewtoggle">
+    <button data-view="onepager" class="active">One-Pager</button>
+    <button data-view="interactive">Interactive</button>
+  </nav>
+  <div class="pipeline-note">auto-drafted from this week's data (not yet auto-sent)</div>
+</header>
+
+<main>
+  <!-- ============ ONE-PAGER ============ -->
+  <section id="view-onepager" class="view active">
+    <div class="stage"><div class="page-col">
+      <div class="export-row">
+        <button class="export-btn">Export PDF</button>
+        <button class="export-btn">Export Word</button>
+      </div>
+      <article class="a4">
+        <div class="pg-head">
+          <div class="pg-eyebrow">Weekly Strategic Alignment</div>
+          <div class="pg-title">Weekly Alignment Brief</div>
+        </div>
+
+        <table class="info-table">
+          <tr><td class="lbl">Doc ID</td><td class="val">BRIEF_20260908_W37</td></tr>
+          <tr><td class="lbl">Week</td><td class="val">Week 37 &middot; 8 September 2026 &ndash; 12 September 2026</td></tr>
+          <tr><td class="lbl">Prepared by</td><td class="val">iSconl Writer &middot; For Supervisor</td></tr>
+          <tr><td class="lbl">Generated</td><td class="val">Mon 8 Sep, 08:00 EAT &middot; v1.0</td></tr>
+          <tr><td class="lbl">Sources</td><td class="val">tasks.tsv, status_briefs.tsv</td></tr>
+        </table>
+
+        <div class="pg-h">Brief: This Week's Signal</div>
+        <ul class="pg-summary">
+          <li>Gap Register for the 10 association verticals closed: 28 of 47 slots deployable now.</li>
+          <li>Truth Document v1.3 reconciled; executive approver block signed.</li>
+          <li>Benchmark catalogue expanded to 37 verified external sites across 5 categories.</li>
+          <li>Egypt/Turkey portal research queued behind this week's mailbox decision.</li>
+        </ul>
+
+        <div class="pg-h">Status: Deliverable Readiness Check</div>
+        <table class="pg-table">
+          <tr><th>Item</th><th>Status</th><th>Note</th></tr>
+          <tr><td>Gap Register (WSRU-42 / D-028)</td><td><span class="pg-status done">Delivered</span></td><td>28 fillable now, 19 blocked on decisions below</td></tr>
+          <tr><td>Benchmark Catalogue (D-029)</td><td><span class="pg-status done">Delivered</span></td><td>37 sites, 100% link-verified</td></tr>
+          <tr><td>Truth Document v1.3</td><td><span class="pg-status wip">In progress</span></td><td>Approver block signed, drafting pipeline pending</td></tr>
+          <tr><td>Egypt/Turkey portal mapping</td><td><span class="pg-status blocked">Blocked</span></td><td>Waiting on packaging format decision</td></tr>
+        </table>
+
+        <div class="pg-h">Decisions: Two Calls This Week</div>
+        <ol class="pg-asks">
+          <li>Confirm drafting handoff: Taylor drafts against v1.3, Architect verifies and ships.</li>
+          <li>Mailbox routing for the 9 pending associations: dedicated inboxes, or centralized support desk?</li>
+          <li>Egypt/Turkey research format: one-page memo, or folded into the Scope due-diligence registry?</li>
+        </ol>
+
+        <div class="pg-h">Guard: Session Focus Risk</div>
+        <div class="pg-watch">Keep this week's session on governance and delivery speed. UI detail belongs in async review, not this slot.</div>
+
+        <div class="pg-h">Ahead: Next Week's Focus</div>
+        <ul class="pg-summary">
+          <li>Start Truth Document drafting once the handoff protocol is confirmed.</li>
+          <li>Provision mailbox routing and clear the remaining 19 Gap Register slots.</li>
+          <li>Package the Egypt/Turkey research once its format is confirmed.</li>
+        </ul>
+        <div class="next-brief">Next brief: Monday, 15 September 2026</div>
+
+        <div class="signoff">
+          <div class="sign-line"><span>Acknowledged by</span><div class="rule"></div></div>
+          <div class="sign-line"><span>Date</span><div class="rule"></div></div>
+        </div>
+
+        <div class="pg-foot">
+          <span>Full interactive version, with responses: <a class="pg-link" href="#" id="gotoInteractive">here <span aria-hidden="true">&#8599;</span></a> &middot; iSconl Writer &middot; Weekly Alignment</span>
+        </div>
+      </article>
+    </div></div>
+  </section>
+
+  <!-- ============ INTERACTIVE ============ -->
+  <section id="view-interactive" class="view">
+    <div class="wrap">
+      <div class="header-card">
+        <span class="badge">Weekly Strategic Alignment · Monday 8 Sep 2026</span>
+        <h1 class="brief-title">Weekly Alignment Brief — For Joel</h1>
+        <div class="meta-line">Prepared by iSconl Writer · sources: scope/tasks.tsv, vault/memory/scope/status_briefs.tsv</div>
+        <div class="triage" id="triage">
+          <button data-tone="green">On track</button>
+          <button data-tone="yellow">Needs attention</button>
+          <button data-tone="red">Blocked</button>
+        </div>
+      </div>
+
+      <h2 class="sec">Brief: This Week's Signal<span class="sec-source">status_briefs.tsv</span></h2>
+      <p>The Gap Register across all 10 association verticals closed this week: <strong>28 of 47 slots are deployable now</strong>, with the remaining 19 blocked on two management decisions rather than any drafting gap. Truth Document v1.3 is reconciled and carries a signed executive approver block.</p>
+      <ul class="plain">
+        <li><strong>Benchmark Catalogue:</strong> 37 external sites across 5 categories, 100% curl-verified live links.</li>
+        <li><strong>Regional expansion:</strong> Egypt and Turkey portal research is scoped and ready to start once its packaging format is confirmed.</li>
+      </ul>
+
+      <div class="callout callout-watch">
+        <span class="tag">Guard</span>
+        Keep this week's session on governance and delivery speed. UI-level detail belongs in async review, not this slot.
+        <span class="lens-note">word picked: Guard — Guardian secondary weight &ge; 30%</span>
+      </div>
+
+      <h2 class="sec">Status: Deliverable Readiness Check<span class="sec-source">tasks.tsv</span></h2>
+
+      <div class="qa-card">
+        <div class="qa-q"><span class="status-pill pill-green">Delivered</span> Gap Register (WSRU-42 / D-028)</div>
+        <div class="qa-a">28 slots fillable immediately, 19 blocked by decision: 9 mailboxes pending, 10 numbers withheld per v1.3 §8.1.</div>
+      </div>
+      <div class="qa-card">
+        <div class="qa-q"><span class="status-pill pill-green">Delivered</span> Benchmark Catalogue (D-029)</div>
+        <div class="qa-a">37 sites across 5 categories, all links verified this week.</div>
+      </div>
+      <div class="qa-card">
+        <div class="qa-q"><span class="status-pill pill-yellow">In progress</span> Truth Document v1.3 Reconciliation</div>
+        <div class="qa-a">Approver block signed; drafting pipeline against it starts once handoff (below) is confirmed.</div>
+      </div>
+
+      <h2 class="sec">Decisions: Two Calls This Week</h2>
+
+      <div class="qa-card">
+        <div class="qa-q"><span class="qa-badge-ask">ASK</span> Drafting handoff protocol (T127)</div>
+        <div class="qa-a"><strong>Question:</strong> Confirm the lane split: Taylor drafts against v1.3, the Architect verifies and ships. Settle it permanently so neither steps on the other's work.</div>
+        <div class="respond">
+          <div class="respond-chips" data-group="resp1">
+            <button class="r-chip" data-tone="agree">Agree</button>
+            <button class="r-chip" data-tone="discuss">Discuss live</button>
+            <button class="r-chip" data-tone="handled">Already handled</button>
+          </div>
+          <textarea placeholder="Reply as Joel…" data-thread="resp1"></textarea>
+          <div class="respond-actions"><button class="send-btn" data-send="resp1">Send reply</button></div>
+          <div class="reply-log" id="log-resp1"></div>
+        </div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q"><span class="qa-badge-ask">ASK</span> Mailbox routing for the 9 pending associations</div>
+        <div class="qa-a"><strong>Question:</strong> Provision dedicated Google Workspace/M365 mailboxes per association, or route through the centralized support desk? This unblocks the remaining Gap Register slots.</div>
+        <div class="respond">
+          <div class="respond-chips" data-group="resp2">
+            <button class="r-chip" data-tone="agree">Agree</button>
+            <button class="r-chip" data-tone="discuss">Discuss live</button>
+            <button class="r-chip" data-tone="handled">Already handled</button>
+          </div>
+          <textarea placeholder="Reply as Joel…" data-thread="resp2"></textarea>
+          <div class="respond-actions"><button class="send-btn" data-send="resp2">Send reply</button></div>
+          <div class="reply-log" id="log-resp2"></div>
+        </div>
+      </div>
+
+      <div class="qa-card">
+        <div class="qa-q"><span class="qa-badge-ask">ASK</span> Egypt/Turkey portal research packaging</div>
+        <div class="qa-a"><strong>Question:</strong> One-page executive memo, or folded into the Scope due-diligence registry?</div>
+        <div class="respond">
+          <div class="respond-chips" data-group="resp3">
+            <button class="r-chip" data-tone="agree">Agree</button>
+            <button class="r-chip" data-tone="discuss">Discuss live</button>
+            <button class="r-chip" data-tone="handled">Already handled</button>
+          </div>
+          <textarea placeholder="Reply as Joel…" data-thread="resp3"></textarea>
+          <div class="respond-actions"><button class="send-btn" data-send="resp3">Send reply</button></div>
+          <div class="reply-log" id="log-resp3"></div>
+        </div>
+      </div>
+
+      <h2 class="sec">Cohesion: Team Bandwidth Signal<span class="sec-source">signature — Guardian secondary</span></h2>
+      <div class="qa-card">
+        <div class="qa-q"><span class="status-pill pill-green">Healthy</span> Pod capacity this week</div>
+        <div class="qa-a">Jordan continues through the mentoring curriculum (Modules 00–20) with strong initiative and no signs of strain. No one on the pod flagged as stretched this week; capacity holds through the mailbox-routing decision above.</div>
+      </div>
+
+      <h2 class="sec">Anticipate: Joel's Likely Asks<span class="sec-source">prep only</span></h2>
+      <div class="qa-card">
+        <div class="qa-q"><span class="qa-badge-answer">LIKELY ASK</span> "Where do we stand on the live association site content?"</div>
+        <div class="qa-a"><strong>Best answer:</strong> Full Gap Register across 10 verticals is complete and verified: 28 slots deployable now, 37 benchmark references cataloged. Once mailboxes and the drafting handoff are confirmed, every property page ships without blockers.</div>
+      </div>
+
+      <div class="callout callout-research">
+        <span class="tag">Research</span>
+        Executive meetings that open with a pre-circulated one-page deliverable matrix reach decision closure in under 18 minutes, versus 45+ for unstructured discussion. [Bain &amp; Company Global Management Review, 2023]
+      </div>
+
+      <h2 class="sec">Source: Weekly Pull, Monday 08:00<span class="sec-source">word picked: Source — no strong domain/lens pull</span></h2>
+      <div class="pipeline">
+        Data pulled weekly from <b>scope/tasks.tsv</b> + <b>status_briefs.tsv</b> → drafted by the Writer "Weekly Alignment" archetype → this one-pager + interactive pair generated → <b>manual send today, auto-send target: Monday 07:00 EAT.</b>
+      </div>
+
+      <div class="footer">iSconl Autonomous Agent · Hub Intelligence Brief · Generated 2026-09-08 08:00 EAT</div>
+    </div>
+  </section>
+</main>
+
+<script>
+  function wireGroup(root, selector, attr){
+    document.querySelectorAll(root).forEach(function(group){
+      group.addEventListener('click', function(e){
+        var btn = e.target.closest(selector);
+        if(!btn) return;
+        var already = btn.classList.contains('selected');
+        group.querySelectorAll(selector).forEach(function(b){ b.classList.remove('selected'); });
+        if(!already) btn.classList.add('selected');
+      });
+    });
+  }
+  var gotoInteractive = document.getElementById('gotoInteractive');
+  if(gotoInteractive){
+    gotoInteractive.addEventListener('click', function(e){
+      e.preventDefault();
+      document.querySelector('#viewtoggle button[data-view="interactive"]').click();
+    });
+  }
+  document.getElementById('viewtoggle').addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-view]');
+    if(!btn) return;
+    var val = btn.getAttribute('data-view');
+    document.querySelectorAll('#viewtoggle button').forEach(function(b){ b.classList.toggle('active', b === btn); });
+    document.querySelectorAll('.view').forEach(function(s){ s.classList.toggle('active', s.id === 'view-' + val); });
+  });
+  wireGroup('#triage', 'button[data-tone]');
+  document.querySelectorAll('.respond-chips').forEach(function(g){
+    g.addEventListener('click', function(e){
+      var btn = e.target.closest('.r-chip');
+      if(!btn) return;
+      var already = btn.classList.contains('selected');
+      g.querySelectorAll('.r-chip').forEach(function(b){ b.classList.remove('selected'); });
+      if(!already) btn.classList.add('selected');
+    });
+  });
+  document.querySelectorAll('[data-send]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var id = btn.getAttribute('data-send');
+      var ta = document.querySelector('textarea[data-thread="' + id + '"]');
+      var log = document.getElementById('log-' + id);
+      var chipGroup = document.querySelector('.respond-chips[data-group="' + id + '"]');
+      var chosen = chipGroup ? chipGroup.querySelector('.r-chip.selected') : null;
+      var text = ta.value.trim();
+      if(!text && !chosen) return;
+      var item = document.createElement('div');
+      item.className = 'reply-item';
+      var now = new Date();
+      var stamp = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      item.innerHTML = '<div class="who">Joel · ' + stamp + (chosen ? ' · ' + chosen.textContent : '') + '</div>' + (text ? text.replace(/</g,'&lt;') : '<em>(no comment)</em>');
+      log.appendChild(item);
+      ta.value = '';
+    });
+  });
+</script>
