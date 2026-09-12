@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 /**
  * BA26090601 - proves the HTML renderer round-trips a node tree the same
  * way the docx/markdown/pdf renderers already do (see test/generate.test.js
@@ -6,7 +6,7 @@
  * expandable bullets carrying a per-item `detail`.
  *
  * No code archetype for `weekly-status-brief` exists in this repo yet
- * (see document-generation-canon.md §3.2's note, added alongside this
+ * (see document-generation-canon.md Â§3.2's note, added alongside this
  * row) so this test builds the node tree directly with node-tree.js's
  * helpers, shaped like that archetype's spec (signal/substance/trajectory
  * + the two new open_questions/suggestions_ideas sections) rather than
@@ -28,7 +28,7 @@ const { renderMarkdown } = require('../lib/generate/render-markdown');
 
 function weeklyStatusBriefTree() {
   return document({
-    headline: 'sub-0001 — Week of 5 Sep 2026',
+    headline: 'sub-0001 â€” Week of 5 Sep 2026',
     metaLine: 'project | sub-0001 | 5 Sep 2026 | v1.0.0 | Sample Recipient',
     sections: [
       kvList([
@@ -77,8 +77,8 @@ test('render-html: produces a well-formed, self-contained HTML document', () => 
   const html = renderHtml(tree);
 
   assert.match(html, /^<!doctype html>/);
-  assert.match(html, /<title>sub-0001 — Week of 5 Sep 2026<\/title>/);
-  assert.match(html, /<h1>sub-0001 — Week of 5 Sep 2026<\/h1>/);
+  assert.match(html, /<title>sub-0001 â€” Week of 5 Sep 2026<\/title>/);
+  assert.match(html, /<h1>sub-0001 â€” Week of 5 Sep 2026<\/h1>/);
   assert.match(html, /OPEN QUESTIONS/);
   assert.match(html, /SUGGESTIONS &amp; IDEAS/);
   // No external network/asset dependency -- no <link>, no remote <script src>.
@@ -87,7 +87,7 @@ test('render-html: produces a well-formed, self-contained HTML document', () => 
   assert.match(html, /<style>/);
 
   // No hardcoded identity -- only the placeholder subject/recipient values.
-  assert.doesNotMatch(html, /Sconl Peter/);
+  assert.doesNotMatch(html, /Sconl Peter/); // identity-allow: asserts the name is ABSENT
 });
 
 test('render-html: a bullet with a `detail` renders expandable, one without does not', () => {

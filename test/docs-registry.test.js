@@ -4,6 +4,15 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// KI26091201: the OneDrive document roots are tenant-identifying and are no
+// longer hardcoded as defaults in docs-registry.js -- they come from the
+// environment, with no default, so a missing value fails loudly instead of
+// silently writing into someone else's folder. These tests supply their own
+// neutral values; they must NEVER be set to a real path. Assigned before the
+// require so the module's destructured defaults read them.
+process.env.SCOPE_DOC_ROOT_GENERAL = process.env.SCOPE_DOC_ROOT_GENERAL || 'TENANT_DOC_ROOT/general';
+process.env.SCOPE_DOC_ROOT_CORPORATE = process.env.SCOPE_DOC_ROOT_CORPORATE || 'TENANT_DOC_ROOT/corporate';
+
 const { createDocsRegistryClient } = require('../lib/generate/docs-registry');
 
 function makeStore(seed = {}) {

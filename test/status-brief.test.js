@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createStatusBriefClient } = require('../lib/status-brief');
@@ -106,7 +106,7 @@ test('sendBrief sends the composed body and marks the brief sent on success', as
     ...store, callSpark: async () => DRAFT_RESULT,
     sendMail: async ({ to, subject, body }) => { sentBody = { to, subject, body }; return { ok: true }; },
   });
-  const r = await client.sendBrief('SB0001', { via: 'email', to: 'sconl@acexoft.com' });
+  const r = await client.sendBrief('SB0001', { via: 'email', to: 'sconl@example.com' });
   assert.ok(r.success);
   assert.match(sentBody.subject, /SUBJ001/);
   assert.match(sentBody.body, /s1/);

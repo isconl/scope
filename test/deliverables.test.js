@@ -4,6 +4,13 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+
+// KI26091201: the tenant folder name is environment-supplied, never hardcoded
+// in lib/ -- this repo is public. Set before the require below, because
+// deliverables.js reads it once at module load. This is a NEUTRAL fixture
+// name and must never be set to a real tenant's folder.
+process.env.SCOPE_TENANT_FOLDER = process.env.SCOPE_TENANT_FOLDER || 'TenantOne';
+
 const deliv = require('../lib/deliverables');
 
 function tmpWorkspace() {
