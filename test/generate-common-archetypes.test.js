@@ -49,9 +49,27 @@ test('decision-brief renders a valid .docx package', async () => {
   assert.equal(buf.slice(0, 2).toString(), 'PK');
 });
 
-test('decision-brief resolves from the _common namespace regardless of caller namespace', () => {
-  const a = getArchetype('tenant-one', 'decision-brief'); // falls back to _common
+test('decision-brief resolves from the _common namespace', () => {
+  const a = getArchetype('_common', 'decision-brief');
   assert.equal(a.id, 'decision-brief');
+});
+
+// KI26091201: this previously asserted the _common FALLBACK -- getArchetype()
+// resolves a _common archetype even when the caller names a different
+// namespace (registry.js:45). That test required a second, tenant-specific
+// namespace to exist on disk, and the only one that did was removed from this
+// repo along with the rest of the tenant-identifying content. The fallback
+// itself is unchanged and still live; it is simply no longer reachable by a
+// test while _common is the only namespace present. Restore cross-namespace
+// coverage by adding a neutral fixture namespace -- never by reintroducing a
+// real tenant id. Until then, assert the sibling behaviour that IS reachable:
+// an unknown namespace fails loudly with an actionable message, which is the
+// documented intent at registry.js:37-40.
+test('getArchetype throws an actionable error for an unknown namespace', () => {
+  assert.throws(
+    () => getArchetype('no-such-namespace', 'decision-brief'),
+    /no archetype namespace "no-such-namespace" - known namespaces: _common/,
+  );
 });
 
 test('seed-data-catalogue builds a table of entries', () => {
