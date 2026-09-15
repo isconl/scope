@@ -23,14 +23,22 @@ test('createStatusBriefClient throws without readTSV/appendTSV or callSpark', ()
   assert.throws(() => createStatusBriefClient({ readTSV: async () => [], appendTSV: async () => {} }));
 });
 
-test('gatherActivity filters tasks by ORG_ID and both sources to the last 7 days', async () => {
+test('gatherActivity filters tasks by ORG_ID and interactions by subject-resolved PERSON_ID, both to the last 7 days', async () => {
   const store = makeStore({
     'scope/tasks.tsv': [
       { ORG_ID: 'tenant-one', CREATED_AT: todayISO(), TITLE: 'In window, matching org' },
       { ORG_ID: 'other', CREATED_AT: todayISO(), TITLE: 'Wrong org' },
       { ORG_ID: 'tenant-one', CREATED_AT: '2020-01-01', TITLE: 'Too old' },
     ],
-    'circle/interactions.tsv': [{ DATE: todayISO(), SUMMARY: 'Recent touch' }],
+    'circle/people.tsv': [
+      { ID: 'p1', GROUP: 'tenant-one' },
+      { ID: 'p2', GROUP: 'other-org' },
+    ],
+    'circle/interactions.tsv': [
+      { PERSON_ID: 'p1', DATE: todayISO(), SUMMARY: 'Recent touch, subject person' },
+      { PERSON_ID: 'p2', DATE: todayISO(), SUMMARY: 'Recent touch, wrong subject' },
+      { PERSON_ID: 'p1', DATE: '2020-01-01', SUMMARY: 'Old touch, subject person' },
+    ],
   });
   const client = createStatusBriefClient({ ...store, callSpark: async () => DRAFT_RESULT });
   const activity = await client.gatherActivity(SUBJECT);
@@ -38,7 +46,9 @@ test('gatherActivity filters tasks by ORG_ID and both sources to the last 7 days
   assert.ok(summaries.includes('In window, matching org'));
   assert.ok(!summaries.includes('Wrong org'));
   assert.ok(!summaries.includes('Too old'));
-  assert.ok(summaries.includes('Recent touch'));
+  assert.ok(summaries.includes('Recent touch, subject person'));
+  assert.ok(!summaries.includes('Recent touch, wrong subject'));
+  assert.ok(!summaries.includes('Old touch, subject person'));
 });
 
 test('draftBrief calls spark with the subject/supervisor and stores a draft row', async () => {
@@ -123,6 +133,29 @@ test('sendBrief surfaces a mail-send failure without marking the brief sent', as
   assert.equal(r.success, false);
   const rows = await client.listBriefs();
   assert.equal(rows[0].STATUS, 'draft');
+});
+
+test('FA26091202: concurrent drafts via rewriteTSV never collide on ID', async () => {
+  const store = makeStore({ 'scope/active_subjects.tsv': [SUBJECT] });
+  const client = createStatusBriefClient({ ...store, callSpark: async () => DRAFT_RESULT });
+  const [a, b] = await Promise.all([client.draftBrief('SUBJ001'), client.draftBrief('SUBJ001')]);
+  assert.ok(a.success && b.success);
+  assert.notEqual(a.id, b.id);
+  const rows = await client.listBriefs();
+  assert.equal(rows.length, 2);
+  assert.notEqual(rows[0].ID, rows[1].ID);
+});
+
+test('FA26091202: listBriefs degrades a malformed JSON cell instead of throwing for the whole listing', async () => {
+  const store = makeStore({ 'scope/status_briefs.tsv': [
+    { ID: 'SB0001', SUBJECT_ID: 'SUBJ001', SIGNAL: 'not json', SUBSTANCE: '[]', TRAJECTORY: '[]' },
+    { ID: 'SB0002', SUBJECT_ID: 'SUBJ001', SIGNAL: '["ok"]', SUBSTANCE: '[]', TRAJECTORY: '[]' },
+  ] });
+  const client = createStatusBriefClient({ ...store, callSpark: async () => DRAFT_RESULT });
+  const rows = await client.listBriefs();
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0].SIGNAL, []);
+  assert.deepEqual(rows[1].SIGNAL, ['ok']);
 });
 
 test('mondayOf resolves a date to its ISO week Monday', () => {
