@@ -1,5 +1,10 @@
 <title>Weekly Alignment Brief</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&display=swap">
 <style>
+  /* Theme config, the two knobs meant to be swapped per publication/brief:
+     --pg-accent (color, below) and --font-heading (typeface, below). See
+     `BP26091301`/`BB26091204` addendum for the publication-level brand-kit
+     this is meant to generalize into. */
   :root{
     --bg:#0d1117;
     --surface:#161b22;
@@ -23,6 +28,7 @@
     --red-bg:rgba(248,81,73,0.08);
     --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --font-heading:'Barlow', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
     --pg-bg:#fbfbf9;
     --pg-ink:#15181c;
@@ -60,7 +66,19 @@
   .view{ display:none; }
   .view.active{ display:block; }
 
-  /* ================= ONE-PAGER (print/export) ================= */
+  /* ================= ONE-PAGER (print/export) =================
+     WYSIWYG rule, learned the hard way (12-13 Sep 2026 session building
+     a real supervisor brief off this reference): the on-screen preview
+     must be structurally IDENTICAL to the print/PDF output, not a
+     separate approximation. The original version of this block used a
+     fixed aspect-ratio box with overflow-y:auto to *simulate* a page on
+     screen -- that's exactly wrong for print, because a browser's print
+     engine does not paginate a scrolling container, it just clips it to
+     whatever the box's fixed height is, silently dropping everything
+     past that point. Fixed here: no aspect-ratio, no overflow-y, height
+     is natural content flow (min-height only, for the on-screen page
+     silhouette) -- so if content overflows on screen, it will also
+     overflow to a second PDF page, which is the correct, honest signal. */
   .stage{ display:flex; justify-content:center; }
   .page-col{ width:min(210mm,94vw); display:flex; flex-direction:column; gap:14px; }
   .export-row{ display:flex; justify-content:center; gap:8px; }
@@ -73,15 +91,29 @@
 
   .a4{
     background:var(--pg-bg); color:var(--pg-ink);
-    width:100%; aspect-ratio:210/297; overflow-y:auto;
+    width:100%; min-height:297mm;
     box-shadow:0 24px 60px -16px var(--pg-shadow), 0 2px 10px var(--pg-shadow);
-    border-radius:2px; padding:24mm; font-family:var(--font-sans);
+    border-radius:2px; padding:15mm; font-family:var(--font-sans);
   }
-  .a4::-webkit-scrollbar{ width:8px; } .a4::-webkit-scrollbar-thumb{ background:var(--pg-line); border-radius:8px; }
 
-  .pg-head{ border-bottom:2px solid var(--pg-accent); padding-bottom:10px; margin-bottom:10px; }
+  .pg-head{ border-bottom:1px solid var(--pg-line); padding-bottom:10px; margin-bottom:10px; }
   .pg-eyebrow{ font-family:var(--font-mono); font-size:0.7rem; text-transform:uppercase; letter-spacing:0.09em; color:var(--pg-accent); margin-bottom:4px; }
-  .pg-title{ font-size:2.05rem; font-weight:900; letter-spacing:-0.015em; line-height:1.12; }
+  .pg-title{ font-family:var(--font-heading); font-size:2.2rem; font-weight:700; letter-spacing:-0.015em; line-height:1.12; }
+
+  /* Print/PDF: margins come from @page, never from .a4's own padding, so
+     every page (even an overflow page) gets the same margin -- and .a4
+     drops any flex/fixed-height/overflow trick, since those are exactly
+     what breaks multi-page output in Chromium's print engine. */
+  @page{ size: A4; margin: 15mm; }
+  @media print{
+    html, body{ background:#fff; margin:0; }
+    .chrome, .export-row{ display:none; }
+    main{ padding:0; }
+    .stage{ display:block; padding:0; }
+    .page-col{ width:auto; display:block; }
+    .a4{ box-shadow:none; border-radius:0; width:auto; min-height:auto; padding:0; margin:0; }
+    .pg-table, .pg-asks li, .pg-summary li{ break-inside:avoid; }
+  }
 
   .info-table{ width:100%; border-collapse:collapse; margin-bottom:22px; }
   .info-table td{ padding:3px 12px 3px 0; border-bottom:1px solid var(--pg-line); vertical-align:baseline; }
@@ -199,7 +231,7 @@
   <section id="view-onepager" class="view active">
     <div class="stage"><div class="page-col">
       <div class="export-row">
-        <button class="export-btn">Export PDF</button>
+        <button class="export-btn" onclick="window.print()">Export PDF</button>
         <button class="export-btn">Export Word</button>
       </div>
       <article class="a4">
@@ -216,12 +248,15 @@
           <tr><td class="lbl">Sources</td><td class="val">tasks.tsv, status_briefs.tsv</td></tr>
         </table>
 
+        <!-- Standing content rule (added 13 Sep 2026): distill each
+             section to at most 3 bullet items, and avoid em dashes /
+             other AI-tell phrasing -- keeps a one-page brief actually
+             one page, and keeps the prose reading like a person wrote it. -->
         <div class="pg-h">Brief: This Week's Signal</div>
         <ul class="pg-summary">
           <li>Gap Register for the 10 association verticals closed: 28 of 47 slots deployable now.</li>
           <li>Truth Document v1.3 reconciled; executive approver block signed.</li>
           <li>Benchmark catalogue expanded to 37 verified external sites across 5 categories.</li>
-          <li>Egypt/Turkey portal research queued behind this week's mailbox decision.</li>
         </ul>
 
         <div class="pg-h">Status: Deliverable Readiness Check</div>
@@ -240,7 +275,7 @@
           <li>Egypt/Turkey research format: one-page memo, or folded into the Scope due-diligence registry?</li>
         </ol>
 
-        <div class="pg-h">Guard: Session Focus Risk</div>
+        <div class="pg-h">Note: Focus Risk</div>
         <div class="pg-watch">Keep this week's session on governance and delivery speed. UI detail belongs in async review, not this slot.</div>
 
         <div class="pg-h">Ahead: Next Week's Focus</div>
