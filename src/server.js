@@ -140,7 +140,7 @@ async function main() {
 
   const decisions = createDecisionsClient({ readTSV, auditLog, getCareerContext });
   const plans = createPlansClient({ readTSV, appendTSV, rewriteTSV, auditLog });
-  const planningInsights = createPlanningInsightsClient({ readTSV, appendTSV, auditLog });
+  const planningInsights = createPlanningInsightsClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const surfacedTasks = createSurfacedTasksClient({ readTSV, appendTSV, rewriteTSV, auditLog });
   const portalParties = createPortalPartiesClient({ readTSV, appendTSV, auditLog });
   const styleCorpus = createStyleCorpusClient({ readTSV, appendTSV, auditLog });
@@ -423,6 +423,18 @@ async function main() {
       }
       if (pathname === '/planning-insights/curate' && req.method === 'POST') {
         return sendJson(res, 200, await planningInsights.runCuration());
+      }
+      // WI26091504: the daily half. Re-score what is already curated, then
+      // promote what newly qualifies -- one call, so the VM's systemd timer
+      // is a one-line curl rather than a sequence it can execute half of.
+      // Also invocable by hand, which a bare timer-script would not be.
+      if (pathname === '/planning-insights/daily' && req.method === 'POST') {
+        return sendJson(res, 200, await planningInsights.runDaily());
+      }
+      // Exposed separately from /daily so the re-score can be run and
+      // reasoned about on its own while tuning the scoring heuristic.
+      if (pathname === '/planning-insights/rescore' && req.method === 'POST') {
+        return sendJson(res, 200, await planningInsights.runRescore());
       }
 
       if (pathname === '/surfaced-tasks' && req.method === 'GET') {

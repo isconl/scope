@@ -1,0 +1,23 @@
+# WI26091504 -- fires the daily pass above.
+#
+# Persistent=true is the load-bearing setting: if the VM is down or rebooting
+# at the scheduled minute, the run happens on the next boot instead of being
+# silently skipped. Without it a "daily" job quietly becomes a
+# "daily-unless-anything-happened" job, which is the failure mode the row
+# specifically objected to.
+
+[Unit]
+Description=iSconl -- run the daily planning-insight pass
+Requires=isconl-planning-insights.service
+
+[Timer]
+# 04:15 local: after the vault backup loop's overnight generations, before
+# any working day starts, and deliberately not on the hour where it would
+# contend with every other cron on the box.
+OnCalendar=*-*-* 04:15:00
+Persistent=true
+# Spread the start so a fleet-wide restart does not fire everything at once.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
