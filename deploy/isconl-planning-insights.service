@@ -1,0 +1,53 @@
+# WI26091504 -- the daily self-improving pass over scope/planning_insights.tsv.
+#
+# A oneshot unit, not a long-running service: it fires, calls one endpoint,
+# and exits. The work itself lives in the `scope` container (capability
+# planningInsights.daily), so this unit carries no logic, no config and no
+# copy of anything -- which is the point. If the scoring changes, this file
+# does not.
+#
+# Install on isconl-vault-a1:
+#   sudo cp isconl-planning-insights.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now isconl-planning-insights.timer
+#
+# The token is read from a root-only environment file rather than written
+# into this unit, because unit files under /etc/systemd/system are
+# world-readable by default and a token in one is a token in `systemctl cat`
+# output (CLAUDE.md section 17 -- prefer the shape that cannot leak over the
+# habit of remembering not to):
+#   printf 'SCOPE_TOKEN=%s\n' "<token>" | sudo tee /etc/isconl/planning-insights.env
+#   sudo chmod 600 /etc/isconl/planning-insights.env
+#
+# Verify a run without waiting for the timer:
+#   sudo systemctl start isconl-planning-insights.service
+#   journalctl -u isconl-planning-insights.service -n 50
+#   curl -s -H "Authorization: Bearer $SCOPE_TOKEN" localhost:8083/planning-insights | head
+# The last command is the real check: `lastValidatedAt` is the date of the
+# last successful pass, read straight out of the data. A run that did not
+# happen cannot fake it.
+
+[Unit]
+Description=iSconl -- daily planning-insight re-score and promotion pass
+Documentation=https://github.com/Sconl/_kit
+# The timer must not fire into a scope container that is not up yet after a
+# reboot. This orders the unit, and the curl retry below covers the rest.
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/isconl/planning-insights.env
+# --fail makes a 4xx/5xx a unit failure instead of a silent success, which is
+# the difference between a broken daily job that is visible in
+# `systemctl list-units --failed` and one that looks fine for months.
+# --retry covers the narrow window where the timer beats the container up.
+ExecStart=/usr/bin/curl --fail --silent --show-error \
+  --retry 5 --retry-delay 10 --retry-connrefused \
+  --max-time 300 \
+  -X POST \
+  -H "Authorization: Bearer ${SCOPE_TOKEN}" \
+  http://127.0.0.1:8083/planning-insights/daily
+
+[Install]
+WantedBy=multi-user.target

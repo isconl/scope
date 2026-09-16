@@ -138,6 +138,15 @@ test('deleteTask deletes the linked Jira issue first, and keeps the local row if
   assert.equal(store.data['scope/tasks.tsv'].length, 1, 'local row kept when Jira delete fails');
 });
 
+test('FI26091201: deleteTask still deletes the local row on a Jira permissionDenied (403) -- unlike a transient failure', async () => {
+  const store = makeStore({ 'scope/tasks.tsv': [{ ID: 'T1', TITLE: 'x', JIRA_KEY: 'WSRU-1' }] });
+  const client = createTasksClient({ ...store, jira: fakeJira({ jiraDeleteIssue: async () => ({ success: false, error: 'no delete permission', permissionDenied: true }) }) });
+  const r = await client.deleteTask({ taskId: 'T1' });
+  assert.equal(r.failed, false);
+  assert.equal(r.jira.permissionDenied, true);
+  assert.equal(store.data['scope/tasks.tsv'].length, 0, 'local row deleted despite the Jira 403');
+});
+
 test('deleteTask removes the local row when the Jira delete succeeds (or there is no linked issue)', async () => {
   const store = makeStore({ 'scope/tasks.tsv': [{ ID: 'T1', TITLE: 'x', JIRA_KEY: '-' }] });
   const client = createTasksClient({ ...store });
